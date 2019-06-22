@@ -19,10 +19,10 @@ typedef enum {
 typedef struct {
     const char *pubkey;
     const char *seckey;
-    char *store_url;
+    const char *store_url;
     void *ctx;
     int sample_rate;
-} csentry;
+} csentry_t;
 
 typedef struct {
     const char *str;
@@ -122,7 +122,7 @@ static int parse_project_id(const char *str)
 /**
  * see: https://docs.sentry.io/development/sdk-dev/overview/
  */
-static csentry *parse_dsn(const char *dsn)
+static csentry_t *parse_dsn(const char *dsn)
 {
     http_scheme scheme;
     strbuf_t pubkey;
@@ -130,7 +130,7 @@ static csentry *parse_dsn(const char *dsn)
     strbuf_t host;
     const char *projid;
     size_t n;
-    csentry *client = NULL;
+    csentry_t *client = NULL;
 
     assert_nonnull(dsn);
 
@@ -170,7 +170,7 @@ static csentry *parse_dsn(const char *dsn)
     printf("Host: %.*s\n", (int) host.size, host.str);
     printf("Projid: %s\n", projid);
 
-    client = (csentry *) malloc(sizeof(*client));
+    client = (csentry_t *) malloc(sizeof(*client));
     if (client == NULL) goto out_exit;
     (void) memset(client, 0, sizeof(*client));
 
@@ -193,7 +193,7 @@ out_oom:
     client->store_url = (char *) malloc(n);
     if (client->store_url == NULL) goto out_oom;
 
-    (void) snprintf(client->store_url, n, "%s%.*s/api/%s/store/",
+    (void) snprintf((char *) client->store_url, n, "%s%.*s/api/%s/store/",
             http_scheme_string[scheme], (int) host.size, host.str, projid);
 
     printf("> %s\n", client->pubkey);
@@ -207,11 +207,11 @@ out_exit:
 
 void csentry_destroy(void *arg)
 {
-    csentry *ins = (csentry *) arg;
+    csentry_t *ins = (csentry_t *) arg;
     if (ins != NULL) {
         free((void *) ins->pubkey);
         free((void *) ins->seckey);
-        free(ins->store_url);
+        free((void *) ins->store_url);
         free(ins);
     }
 }
@@ -227,7 +227,7 @@ void *csentry_new(
         float sample_rate,
         int install_handlers)
 {
-    void *ins = NULL;
+    csentry_t *client = NULL;
 
     UNUSED(ctx, install_handlers);
 
@@ -238,10 +238,10 @@ void *csentry_new(
         goto out_exit;
     }
 
-    ins = parse_dsn(dsn);
+    client = parse_dsn(dsn);
 
 out_exit:
-    return ins;
+    return client;
 }
 
 int main(void)
