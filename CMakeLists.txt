@@ -37,6 +37,7 @@ find_package(curl REQUIRED)
 add_executable(csentry
         include/csentry.h
         src/utils.h
+        src/utils.c
     src/csentry.c
 )
 

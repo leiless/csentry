@@ -29,6 +29,9 @@
         goto label;                             \
     } while (0)
 
+#define set_errno_and_jump(val, label)  \
+    set_error_and_jump(errno, val, label)
+
 /*
  * Assume all error variable named `e' and all goto label starts with `out_'
  */
