@@ -19,7 +19,9 @@ typedef enum {
 typedef struct {
     const char *pubkey;
     const char *seckey;
-    const char *store_url;
+    char *store_url;
+    void *ctx;
+    int sample_rate;
 } csentry;
 
 typedef struct {
@@ -117,6 +119,9 @@ static int parse_project_id(const char *str)
     return 0;
 }
 
+/**
+ * see: https://docs.sentry.io/development/sdk-dev/overview/
+ */
 static csentry *parse_dsn(const char *dsn)
 {
     http_scheme scheme;
@@ -124,6 +129,7 @@ static csentry *parse_dsn(const char *dsn)
     strbuf_t seckey;
     strbuf_t host;
     const char *projid;
+    size_t n;
     csentry *client = NULL;
 
     assert_nonnull(dsn);
@@ -163,10 +169,51 @@ static csentry *parse_dsn(const char *dsn)
     printf("Seckey: %.*s\n", (int) seckey.size, seckey.str);
     printf("Host: %.*s\n", (int) host.size, host.str);
     printf("Projid: %s\n", projid);
+
+    client = (csentry *) malloc(sizeof(*client));
+    if (client == NULL) goto out_exit;
+    (void) memset(client, 0, sizeof(*client));
+
+    client->pubkey = strndup(pubkey.str, pubkey.size);
+    if (client->pubkey == NULL) {
+out_oom:
+        csentry_destroy(client);
+        client = NULL;
+        goto out_exit;
+    }
+
+    if (seckey.str != NULL) {
+        client->seckey = strndup(seckey.str, seckey.size);
+        if (client->seckey == NULL) goto out_oom;
+    }
+
+    n = strlen(http_scheme_string[scheme]) + host.size +
+            STRLEN("/api/") + strlen(projid) + STRLEN("/store/") + 1;
+
+    client->store_url = (char *) malloc(n);
+    if (client->store_url == NULL) goto out_oom;
+
+    (void) snprintf(client->store_url, n, "%s%.*s/api/%s/store/",
+            http_scheme_string[scheme], (int) host.size, host.str, projid);
+
+    printf("> %s\n", client->pubkey);
+    printf("> %s\n", client->seckey);
+    printf("> %s\n", client->store_url);
     printf("\n");
 
 out_exit:
     return client;
+}
+
+void csentry_destroy(void *arg)
+{
+    csentry *ins = (csentry *) arg;
+    if (ins != NULL) {
+        free((void *) ins->pubkey);
+        free((void *) ins->seckey);
+        free(ins->store_url);
+        free(ins);
+    }
 }
 
 /**
@@ -174,17 +221,33 @@ out_exit:
  *  SCHEME://PUBKEY[:SECKEY]@HOST[:PORT]/PROJECT_ID
  * The secret key is obsolete in newer DSN format(remain for compatible reason)
  */
-void *csentry_new(char *dsn)
+void *csentry_new(
+        const char *dsn,
+        const char *ctx,
+        float sample_rate,
+        int install_handlers)
 {
+    void *ins = NULL;
+
+    UNUSED(ctx, install_handlers);
+
     assert_nonnull(dsn);
-    parse_dsn(dsn);
-    return NULL;
+
+    if (sample_rate < 0.0 || sample_rate > 1.0) {
+        errno = EINVAL;
+        goto out_exit;
+    }
+
+    ins = parse_dsn(dsn);
+
+out_exit:
+    return ins;
 }
 
 int main(void)
 {
-    csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608");
-    csentry_new("http://93ea558ffecdcee3ca9e7fab8927:be7e8d34da87071eb8c36eab55460f98@sentry.io:8080/159723482");
+    csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 0, 0);
+    csentry_new("http://93ea558ffecdcee3ca9e7fab8927:be7e8d34da87071eb8c36eab55460f98@sentry.io:8080/159723482", NULL, 0, 0);
     return 0;
 }
 

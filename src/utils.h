@@ -11,17 +11,17 @@
 #define assert_nonnull(p)       assert((p) != NULL)
 #endif
 
-#ifndef STRLEN
 /**
  * Should only used for `char[]'  NOT `char *'
  * Assume ends with null byte('\0')
  */
 #define STRLEN(s)               (sizeof(s) - 1)
-#endif
 
 #ifndef MIN
 #define MIN(a, b)               ((a) < (b) ? (a) : (b))
 #endif
+
+#define UNUSED(e, ...)          (void) ((void) (e), ##__VA_ARGS__)
 
 #define set_error_and_jump(var, val, label)     \
     do {                                        \

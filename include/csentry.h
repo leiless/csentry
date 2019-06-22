@@ -8,9 +8,11 @@
 #define __CSENTRY_H__
 
 /*
- *
+ * TODO
  */
-void *csentry_new(char *);
+void *csentry_new(const char *, const char *, float, int);
+
+void csentry_destroy(void *);
 
 #endif /* __CSENTRY_H__ */
 
