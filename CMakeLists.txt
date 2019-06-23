@@ -9,7 +9,8 @@ project(csentry VERSION 0.1)
 # see: https://cmake.org/cmake/help/latest/policy/CMP0042.html
 cmake_policy(SET CMP0042 NEW)
 
-set(DEBUG_ARGS -DDEBUG -g -O0 -fno-inline)
+# Add -fno-inline if you suppose to C99 and later standards
+set(DEBUG_ARGS -DDEBUG -g -O0)
 #add_definitions(-Wall -Wextra -Werror -pedantic)
 add_definitions(-Wall -Wextra -Werror)
 if (NOT CMAKE_BUILD_TYPE)
@@ -23,17 +24,20 @@ endif ()
 # see: https://cmake.org/cmake/help/latest/module/CheckCCompilerFlag.html
 include(CheckCCompilerFlag)
 # XXX: COMPILER_SUPPORTS_C99 var name will trigger a bug in macOS CMake(3.14.5) ?!
-check_c_compiler_flag("-std=c99" C99_SUPPORT)
-if (C99_SUPPORT)
-    add_definitions(-std=c99)
+check_c_compiler_flag("-std=c89" C89_SUPPORT)
+if (C89_SUPPORT)
+    add_definitions(-std=c89)
 else ()
-    message(FATAL_ERROR "The compiler ${CMAKE_C_COMPILER} have no c99 support, "
+    message(FATAL_ERROR "The compiler ${CMAKE_C_COMPILER} have no c89 support, "
                         "Please use a newer C/C++ compiler.")
 endif ()
 
 include_directories(include)
 
 find_package(curl REQUIRED)
+find_package(cjson REQUIRED)
+
+set(LIBS curl cjson)
 
 add_executable(csentry
         include/csentry.h
@@ -41,4 +45,5 @@ add_executable(csentry
         src/utils.c
     src/csentry.c
 )
+target_link_libraries(csentry ${LIBS})
 

@@ -23,14 +23,13 @@
 
 #define UNUSED(e, ...)          (void) ((void) (e), ##__VA_ARGS__)
 
+#define _nullable               /* Pseudo annotation */
+
 #define set_error_and_jump(var, val, label)     \
     do {                                        \
         var = (val);                            \
         goto label;                             \
     } while (0)
-
-#define set_errno_and_jump(val, label)  \
-    set_error_and_jump(errno, val, label)
 
 /*
  * Assume all error variable named `e' and all goto label starts with `out_'

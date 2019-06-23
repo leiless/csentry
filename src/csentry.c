@@ -8,6 +8,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include <cjson/cJSON.h>
+
 #include "utils.h"
 #include "csentry.h"
 
@@ -20,7 +22,7 @@ typedef struct {
     const char *pubkey;
     const char *seckey;
     const char *store_url;
-    void *ctx;
+    cJSON *ctx;
     int sample_rate;
 } csentry_t;
 
@@ -36,7 +38,7 @@ static const char *http_scheme_string[] = {
         "https://",
 };
 
-static inline int strbuf_eq(const strbuf_t *a, const strbuf_t *b)
+static int strbuf_eq(const strbuf_t *a, const strbuf_t *b)
 {
     assert_nonnull(a);
     assert_nonnull(b);
@@ -120,18 +122,22 @@ static int parse_project_id(const char *str)
 }
 
 /**
+ * Parse DSN and populate required fields in Sentry client
+ * @return      0 if success  -1 o.w.
  * see: https://docs.sentry.io/development/sdk-dev/overview/
  */
-static csentry_t *parse_dsn(const char *dsn)
+static int parse_dsn(csentry_t *client, const char *dsn)
 {
+    int e = 0;
+
     http_scheme scheme;
     strbuf_t pubkey;
     strbuf_t seckey;
     strbuf_t host;
     const char *projid;
     size_t n;
-    csentry_t *client = NULL;
 
+    assert_nonnull(client);
     assert_nonnull(dsn);
 
     if (strprefix(dsn, "http://")) {
@@ -141,11 +147,11 @@ static csentry_t *parse_dsn(const char *dsn)
         scheme = HTTPS_SCHEME;
         dsn += STRLEN("https://");
     } else {
-        set_errno_and_jump(EDOM, out_exit);
+        set_err_jmp(-1, exit);
     }
 
     if (parse_keys(dsn, &pubkey, &seckey) != 0) {
-        set_errno_and_jump(EDOM, out_exit);
+        set_err_jmp(-1, exit);
     }
 
     if (strbuf_eq(&seckey, &STRBUF_NULL)) {
@@ -155,12 +161,12 @@ static csentry_t *parse_dsn(const char *dsn)
     }
 
     if (parse_host(dsn, &host) != 0) {
-        set_errno_and_jump(EDOM, out_exit);
+        set_err_jmp(-1, exit);
     }
     dsn += host.size + 1;   /* +1 for '/' */
 
     if (parse_project_id(dsn) != 0) {
-        set_errno_and_jump(EDOM, out_exit);
+        set_err_jmp(-1, exit);
     }
     projid = dsn;
 
@@ -170,28 +176,26 @@ static csentry_t *parse_dsn(const char *dsn)
     printf("Host: %.*s\n", (int) host.size, host.str);
     printf("Projid: %s\n", projid);
 
-    client = (csentry_t *) malloc(sizeof(*client));
-    if (client == NULL) goto out_exit;
-    (void) memset(client, 0, sizeof(*client));
-
     client->pubkey = strndup(pubkey.str, pubkey.size);
-    if (client->pubkey == NULL) {
-out_oom:
-        csentry_destroy(client);
-        client = NULL;
-        goto out_exit;
-    }
+    if (client->pubkey == NULL) set_err_jmp(-1, exit);
 
     if (seckey.str != NULL) {
         client->seckey = strndup(seckey.str, seckey.size);
-        if (client->seckey == NULL) goto out_oom;
+        if (client->seckey == NULL) {
+            free((void *) client->pubkey);
+            set_err_jmp(-1, exit);
+        }
     }
 
     n = strlen(http_scheme_string[scheme]) + host.size +
             STRLEN("/api/") + strlen(projid) + STRLEN("/store/") + 1;
 
     client->store_url = (char *) malloc(n);
-    if (client->store_url == NULL) goto out_oom;
+    if (client->store_url == NULL) {
+        free((void *) client->pubkey);
+        free((void *) client->seckey);
+        set_err_jmp(-1, exit);
+    }
 
     (void) snprintf((char *) client->store_url, n, "%s%.*s/api/%s/store/",
             http_scheme_string[scheme], (int) host.size, host.str, projid);
@@ -199,20 +203,20 @@ out_oom:
     printf("> %s\n", client->pubkey);
     printf("> %s\n", client->seckey);
     printf("> %s\n", client->store_url);
-    printf("\n");
 
 out_exit:
-    return client;
+    return e;
 }
 
 void csentry_destroy(void *arg)
 {
-    csentry_t *ins = (csentry_t *) arg;
-    if (ins != NULL) {
-        free((void *) ins->pubkey);
-        free((void *) ins->seckey);
-        free((void *) ins->store_url);
-        free(ins);
+    csentry_t *client = (csentry_t *) arg;
+    if (client != NULL) {
+        free((void *) client->pubkey);
+        free((void *) client->seckey);
+        free((void *) client->store_url);
+        cJSON_Delete(client->ctx);
+        free(client);
     }
 }
 
@@ -221,15 +225,13 @@ void csentry_destroy(void *arg)
  *  SCHEME://PUBKEY[:SECKEY]@HOST[:PORT]/PROJECT_ID
  * The secret key is obsolete in newer DSN format(remain for compatible reason)
  */
-void *csentry_new(
+void * _nullable csentry_new(
         const char *dsn,
-        const char *ctx,
+        const cJSON * _nullable ctx,
         float sample_rate,
         int install_handlers)
 {
     csentry_t *client = NULL;
-
-    UNUSED(ctx, install_handlers);
 
     assert_nonnull(dsn);
 
@@ -238,15 +240,73 @@ void *csentry_new(
         goto out_exit;
     }
 
-    client = parse_dsn(dsn);
+    client = (csentry_t *) malloc(sizeof(*client));
+    if (client == NULL) goto out_exit;
+    (void) memset(client, 0, sizeof(*client));
+
+    if (parse_dsn(client, dsn) != 0) {
+        errno = EDOM;
+        free(client);
+        client = NULL;
+        goto out_exit;
+    }
+
+    csentry_ctx_clear(client);
+    if (csentry_ctx_merge(client, ctx) != 0) {
+        errno = ENOTSUP;
+        csentry_destroy(client);
+        client = NULL;
+        goto out_exit;
+    }
+
+    client->sample_rate = (int) (sample_rate * 100);
+    printf("sample_rate: %d\n", client->sample_rate);
+    printf("\n");
+
+    if (install_handlers) {
+        /* TODO */
+    }
 
 out_exit:
     return client;
 }
 
+int csentry_ctx_merge(void *client0, const cJSON * _nullable ctx)
+{
+    int e = 0;
+    cJSON *itor;
+    csentry_t *client = (csentry_t *) client0;
+
+    assert_nonnull(client);
+    if (ctx == NULL) goto out_exit;
+
+    if (!cJSON_IsObject(ctx)) {
+        e = -1;
+        errno = EINVAL;
+        goto out_exit;
+    }
+
+    cJSON_ArrayForEach(itor, ctx) {
+
+    }
+
+out_exit:
+    return e;
+}
+
+void csentry_ctx_clear(void *client0)
+{
+    csentry_t *client = (csentry_t *) client0;
+    assert_nonnull(client);
+
+    cJSON_Delete(client->ctx);
+    client->ctx = cJSON_CreateObject();
+    assert_nonnull(client->ctx);
+}
+
 int main(void)
 {
-    csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 0, 0);
+    csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 1.0, 0);
     csentry_new("http://93ea558ffecdcee3ca9e7fab8927:be7e8d34da87071eb8c36eab55460f98@sentry.io:8080/159723482", NULL, 0, 0);
     return 0;
 }
