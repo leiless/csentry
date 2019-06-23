@@ -43,6 +43,7 @@ set(LIBS curl cjson)
 
 add_executable(csentry
         include/csentry.h
+        src/curl_ez.h
         src/utils.h
         src/utils.c
     src/csentry.c
