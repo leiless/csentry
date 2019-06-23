@@ -7,7 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 
+#include <uuid/uuid.h>
+
+#include <curl/curl.h>
 #include <cjson/cJSON.h>
 
 #include "utils.h"
@@ -208,18 +212,6 @@ out_exit:
     return e;
 }
 
-void csentry_destroy(void *arg)
-{
-    csentry_t *client = (csentry_t *) arg;
-    if (client != NULL) {
-        free((void *) client->pubkey);
-        free((void *) client->seckey);
-        free((void *) client->store_url);
-        cJSON_Delete(client->ctx);
-        free(client);
-    }
-}
-
 /**
  * DSN(Client key) format:
  *  SCHEME://PUBKEY[:SECKEY]@HOST[:PORT]/PROJECT_ID
@@ -271,6 +263,116 @@ out_exit:
     return client;
 }
 
+void csentry_destroy(void *arg)
+{
+    csentry_t *client = (csentry_t *) arg;
+    if (client != NULL) {
+        free((void *) client->pubkey);
+        free((void *) client->seckey);
+        free((void *) client->store_url);
+        cJSON_Delete(client->ctx);
+        free(client);
+    }
+}
+
+#define X_AUTH_HEADER_SIZE      256
+#define SENTRY_PROTOCOL_VER     7
+
+static void post_data(csentry_t *client)
+{
+    char xauth[X_AUTH_HEADER_SIZE];
+    int n;
+    assert_nonnull(client);
+
+    /* TODO: ignore sentry_secret since it's obsoleted */
+    if (client->seckey) {
+        n = snprintf(xauth, X_AUTH_HEADER_SIZE,
+                     "Sentry sentry_version=%d, "
+                     "sentry_timestamp=%ld, "
+                     "sentry_key=%s, "
+                     "sentry_secret=%s, "
+                     "sentry_client=%s/%s",
+                     SENTRY_PROTOCOL_VER,
+                     time(NULL), client->pubkey, client->seckey,
+                     CSENTRY_NAME, CSENTRY_VERSION);
+    } else {
+        n = snprintf(xauth, X_AUTH_HEADER_SIZE,
+                     "Sentry sentry_version=%d, "
+                     "sentry_timestamp=%ld, "
+                     "sentry_key=%s, "
+                     "sentry_client=%s/%s",
+                     SENTRY_PROTOCOL_VER,
+                     time(NULL), client->pubkey,
+                     CSENTRY_NAME, CSENTRY_VERSION);
+    }
+
+    assert(n < X_AUTH_HEADER_SIZE);
+
+    printf("size: %d auth: %s\n", n, xauth);
+
+    CURL *curl = curl_easy_init();
+    assert_nonnull(curl);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+}
+
+/**
+ * char buf[1];
+ * int n = vsnprintf(buf, 1, fmt, ap);
+ * malloc(3) for size n+X(X >= 1) and vsnprintf() again
+ * if malloc(3) fail try static buffer(set truncation attribute if possible)
+ * the static buffer need a mutex
+ *
+ * Capture a message to Sentry server
+ *
+ * see: https://docs.sentry.io/development/sdk-dev/attributes/
+ */
+void csentry_capture_message(
+        void *client0,
+        const cJSON * _nullable attrs,
+        int options,
+        const char *msg)
+{
+    csentry_t *client = (csentry_t *) client0;
+    uuid_t u;
+    uuid_string_t uuid;
+    char ts[ISO_8601_BUFSZ];
+
+    assert_nonnull(client);
+    assert_nonnull(msg);
+
+    UNUSED(options, attrs);
+
+    (void) cJSON_AddStringToObject(client->ctx, "message", msg);
+    uuid_generate(u);
+    uuid_unparse_lower(u, uuid);
+    (void) cJSON_AddStringToObject(client->ctx, "event_id", uuid);
+
+    (void) cJSON_AddStringToObject(client->ctx, "logger", "logger");
+    (void) cJSON_AddStringToObject(client->ctx, "platform", "c");
+    format_iso_8601_time(ts);
+    (void) cJSON_AddStringToObject(client->ctx, "timestamp", ts);
+
+    cJSON *sdk = cJSON_CreateObject();
+    assert_nonnull(sdk);
+    (void) cJSON_AddStringToObject(sdk, "name", CSENTRY_NAME);
+    (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
+
+    cJSON_AddItemReferenceToObject(client->ctx, "sdk", sdk);
+
+    char *str = cJSON_Print(client->ctx);
+    printf("%s\n", str);
+    free(str);
+
+    post_data(client);
+}
+
+/**
+ * Merge Sentry context json into cSentry client
+ * @client0     An opaque cSentry client handle
+ * @ctx         Sentry context json
+ * @return      0 if success -1 o.w.
+ * see: https://github.com/DaveGamble/cJSON/issues/167
+ */
 int csentry_ctx_merge(void *client0, const cJSON * _nullable ctx)
 {
     int e = 0;
@@ -306,8 +408,11 @@ void csentry_ctx_clear(void *client0)
 
 int main(void)
 {
-    csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 1.0, 0);
-    csentry_new("http://93ea558ffecdcee3ca9e7fab8927:be7e8d34da87071eb8c36eab55460f98@sentry.io:8080/159723482", NULL, 0, 0);
+    void *d1 = csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 1.0, 0);
+    void *d2 = csentry_new("http://93ea558ffecdcee3ca9e7fab8927:be7e8d34da87071eb8c36eab55460f98@sentry.io:8080/159723482", NULL, 0, 0);
+
+    csentry_capture_message(d1, NULL, 0, "hello");
+    csentry_capture_message(d2, NULL, 0, "world");
     return 0;
 }
 

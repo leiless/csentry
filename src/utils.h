@@ -38,5 +38,9 @@
 
 int strprefix(const char *, const char *);
 
+#define ISO_8601_BUFSZ      20
+
+void format_iso_8601_time(char *);
+
 #endif /* CSENTRY_UTILS_H */
 

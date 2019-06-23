@@ -2,12 +2,14 @@
 # Created 190622 lynnl
 #
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 2.8)
 
-project(csentry VERSION 0.1)
+project(csentry)
 
+if (${CMAKE_MAJOR_VERSION} GREATER 2)
 # see: https://cmake.org/cmake/help/latest/policy/CMP0042.html
-cmake_policy(SET CMP0042 NEW)
+    cmake_policy(SET CMP0042 NEW)
+endif (${CMAKE_MAJOR_VERSION} GREATER 2)
 
 # Add -fno-inline if you suppose to C99 and later standards
 set(DEBUG_ARGS -DDEBUG -g -O0)

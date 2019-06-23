@@ -3,6 +3,7 @@
  */
 
 #include <string.h>
+#include <time.h>
 
 #include "utils.h"
 
@@ -24,5 +25,22 @@ int strprefix(const char *s1, const char *s2)
     }
 
     return 1;
+}
+
+#define ISO_8601_BUFSZ      20
+
+/**
+ * Format ISO 8601 datetime without trailing timezone
+ */
+void format_iso_8601_time(char *str)
+{
+    time_t now;
+
+    assert_nonnull(str);
+    (void) time(&now);
+
+    *str = '\0';
+    /* gmtime(3) should never return NULL in such case */
+    (void) strftime(str, ISO_8601_BUFSZ, "%Y-%m-%dT%H:%M:%S", gmtime(&now));
 }
 
