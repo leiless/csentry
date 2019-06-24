@@ -16,6 +16,7 @@
 
 #include "utils.h"
 #include "csentry.h"
+#include "curl_ez.h"
 
 typedef enum {
     HTTP_SCHEME = 0,
@@ -310,9 +311,19 @@ static void post_data(csentry_t *client)
 
     printf("size: %d auth: %s\n", n, xauth);
 
-    CURL *curl = curl_easy_init();
-    assert_nonnull(curl);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_ez_t *ez = curl_ez_new();
+    assert_nonnull(ez);
+    CURLcode e;
+    e = curl_ez_set_header(ez, xauth);
+    assert(e == CURLE_OK);
+
+    curl_ez_reply rep = curl_ez_post_json(ez, client->store_url, client->ctx, 0);
+    if (rep.status_code > 0) {
+        printf("status code: %d\ndata: %s\n", rep.status_code, rep.data);
+        free(rep.data);
+    } else {
+        printf("Cannot post message\n");
+    }
 }
 
 /**
