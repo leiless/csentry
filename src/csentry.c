@@ -288,6 +288,7 @@ static void post_data(csentry_t *client)
     /* TODO: ignore sentry_secret since it's obsoleted */
     if (client->seckey) {
         n = snprintf(xauth, X_AUTH_HEADER_SIZE,
+                     "X-Sentry-Auth: "
                      "Sentry sentry_version=%d, "
                      "sentry_timestamp=%ld, "
                      "sentry_key=%s, "
@@ -298,6 +299,7 @@ static void post_data(csentry_t *client)
                      CSENTRY_NAME, CSENTRY_VERSION);
     } else {
         n = snprintf(xauth, X_AUTH_HEADER_SIZE,
+                     "X-Sentry-Auth: "
                      "Sentry sentry_version=%d, "
                      "sentry_timestamp=%ld, "
                      "sentry_key=%s, "
@@ -324,6 +326,8 @@ static void post_data(csentry_t *client)
     } else {
         printf("Cannot post message\n");
     }
+
+    curl_ez_free(ez);
 }
 
 /**
@@ -358,7 +362,7 @@ void csentry_capture_message(
     uuid_unparse_lower(u, uuid);
     (void) cJSON_AddStringToObject(client->ctx, "event_id", uuid);
 
-    (void) cJSON_AddStringToObject(client->ctx, "logger", "logger");
+    (void) cJSON_AddStringToObject(client->ctx, "logger", "builtin");
     (void) cJSON_AddStringToObject(client->ctx, "platform", "c");
     format_iso_8601_time(ts);
     (void) cJSON_AddStringToObject(client->ctx, "timestamp", ts);

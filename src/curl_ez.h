@@ -142,7 +142,7 @@ static size_t ez_post_write_cb(
     if (ptr == NULL) return 0;
 
     mem->data = ptr;
-    (void) memcpy(mem->data + size, contents, n);
+    (void) memcpy(mem->data + mem->size, contents, n);
     mem->size += n;
     mem->data[mem->size] = '\0';
 
