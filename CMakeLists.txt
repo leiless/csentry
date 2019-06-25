@@ -26,11 +26,11 @@ endif ()
 # see: https://cmake.org/cmake/help/latest/module/CheckCCompilerFlag.html
 include(CheckCCompilerFlag)
 # XXX: COMPILER_SUPPORTS_C99 var name will trigger a bug in macOS CMake(3.14.5) ?!
-check_c_compiler_flag("-std=c89" C89_SUPPORT)
+check_c_compiler_flag("-std=c99" C89_SUPPORT)
 if (C89_SUPPORT)
-    add_definitions(-std=c89)
+    add_definitions(-std=c99)
 else ()
-    message(FATAL_ERROR "The compiler ${CMAKE_C_COMPILER} have no c89 support, "
+    message(FATAL_ERROR "The compiler ${CMAKE_C_COMPILER} have no c99 support, "
                         "Please use a newer C/C++ compiler.")
 endif ()
 

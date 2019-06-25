@@ -39,8 +39,8 @@ typedef struct {
 static strbuf_t STRBUF_NULL = {NULL, 0};
 
 static const char *http_scheme_string[] = {
-        "http://",
-        "https://",
+    "http://",
+    "https://",
 };
 
 static int strbuf_eq(const strbuf_t *a, const strbuf_t *b)
@@ -381,18 +381,33 @@ void csentry_capture_message(
     post_data(client);
 }
 
+static int is_known_ctx_name(const char *name)
+{
+    assert_nonnull(name);
+    return !strcmp(name, "user") ||
+            !strcmp(name, "tags") ||
+            !strcmp(name, "extra");
+}
+
 /**
  * Merge Sentry context json into cSentry client
+ *
  * @client0     An opaque cSentry client handle
  * @ctx         Sentry context json
- * @return      0 if success -1 o.w.
- * see: https://github.com/DaveGamble/cJSON/issues/167
+ * @return      0 if success -1 o.w.(errno will be set)
+ *              EINVAL if ctx isn't JSON object
+ *              ENOTSUP if there is any unidentified context name
+ *
+ * see:
+ *  https://github.com/DaveGamble/cJSON/issues/167
+ *  https://docs.sentry.io/enriching-error-data/context/
  */
 int csentry_ctx_merge(void *client0, const cJSON * _nullable ctx)
 {
     int e = 0;
-    cJSON *itor;
     csentry_t *client = (csentry_t *) client0;
+    cJSON *iter;
+    cJSON *copy;
 
     assert_nonnull(client);
     if (ctx == NULL) goto out_exit;
@@ -403,12 +418,44 @@ int csentry_ctx_merge(void *client0, const cJSON * _nullable ctx)
         goto out_exit;
     }
 
-    cJSON_ArrayForEach(itor, ctx) {
+    cJSON_ArrayForEach(iter, ctx) {
+        if (iter->string == NULL) continue;
 
+        printf("%s\n", iter->string);
+
+        if (is_known_ctx_name(iter->string)) {
+            copy = cJSON_Duplicate(iter, 1);
+
+            if (cJSON_GetObjectItem(client->ctx, iter->string) == NULL) {
+                cJSON_AddItemToObject(client->ctx, iter->string, copy);
+            } else {
+                /* Replace won't success if name don't exist */
+                cJSON_ReplaceItemInObject(client->ctx, iter->string, copy);
+            }
+
+            printf("Merging %s into cSentry context\n", iter->string);
+        } else if (!strcmp(iter->string, "level")) {
+            /* Level is ignored, it make sense only for posting message */
+            continue;
+        } else {
+#if 0
+            e = -1;
+            errno = ENOTSUP;
+            break;
+#endif
+        }
     }
 
 out_exit:
     return e;
+}
+
+const cJSON *csentry_ctx_get(void *client0)
+{
+    csentry_t *client = (csentry_t *) client0;
+    assert_nonnull(client);
+    /* TODO: remove message, event_id, logger, platform, timestamp, sdk attrs */
+    return client->ctx;
 }
 
 void csentry_ctx_clear(void *client0)
@@ -423,6 +470,25 @@ void csentry_ctx_clear(void *client0)
 
 int main(void)
 {
+    void *d = csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 1.0, 0);
+    assert_nonnull(d);
+
+    cJSON *json = cJSON_Parse("{\"array\":[1,2,3],\"boolean\":true,\"color\":\"#82b92c\",\"level\":null,\"number\":123,\"user\":{\"a\":\"b\",\"c\":\"d\",\"e\":\"f\"},\"string\":\"HelloWorld\"}");
+    assert_nonnull(json);
+
+    int e;
+    e = csentry_ctx_merge(d, json);
+    if (e != 0) {
+        printf("%d\n", errno);
+    } else {
+        char *str = cJSON_Print(csentry_ctx_get(d));
+        assert_nonnull(str);
+        printf("%s\n", str);
+        free(str);
+    }
+
+    exit(0);
+
     void *d1 = csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 1.0, 0);
     void *d2 = csentry_new("http://93ea558ffecdcee3ca9e7fab8927:be7e8d34da87071eb8c36eab55460f98@sentry.io:8080/159723482", NULL, 0, 0);
 

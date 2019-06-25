@@ -19,6 +19,7 @@ void csentry_destroy(void *);
 
 void csentry_capture_message(void *, const cJSON * _nullable, int, const char *);
 
+const cJSON *csentry_ctx_get(void *);
 void csentry_ctx_clear(void *);
 int csentry_ctx_merge(void *, const cJSON * _nullable);
 
