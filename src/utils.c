@@ -2,6 +2,7 @@
  * Created 190622 lynnl
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -42,5 +43,29 @@ void format_iso_8601_time(char *str)
     *str = '\0';
     /* gmtime(3) should never return NULL in such case */
     (void) strftime(str, ISO_8601_BUFSZ, "%Y-%m-%dT%H:%M:%S", gmtime(&now));
+}
+
+/**
+ * Convert an input UUID string(without hyphens) into binary representation
+ * @param in        Input UUID string(must be 32-length long)
+ * @param uu        [OUT] Binary UUID representation
+ * @return          0 if success  -1 otherwise
+ */
+int uuid_parse32(const char *in, uuid_t uu)
+{
+    uuid_string_t str;
+
+    assert_nonnull(in);
+    assert_nonnull(uu);
+
+    if (strlen(in) != 32) return -1;
+    (void) sprintf(str, "%.*s-%.*s-%.*s-%.*s-%s",
+            8, in,
+            4, in + 8,
+            4, in + 12,
+            4, in + 16,
+            in + 20);
+
+    return uuid_parse(str, uu);
 }
 

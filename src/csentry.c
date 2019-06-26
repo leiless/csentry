@@ -29,6 +29,7 @@ typedef struct {
     const char *store_url;
     cJSON *ctx;
     int sample_rate;
+    uuid_t last_event_id;
 } csentry_t;
 
 typedef struct {
@@ -276,6 +277,33 @@ void csentry_destroy(void *arg)
     }
 }
 
+static void update_event_id(csentry_t *client, const curl_ez_reply *rep)
+{
+    cJSON *response;
+    cJSON *id;
+    const char *value;
+    uuid_t uu;
+
+    assert_nonnull(client);
+    assert_nonnull(rep);
+
+    if (rep->status_code != 200) return;
+    assert_nonnull(rep->data);
+
+    response = cJSON_Parse(rep->data);
+    if (response == NULL) return;
+
+    id = cJSON_GetObjectItem(client->ctx, "id");
+    if (id != NULL) {
+        value = cJSON_GetStringValue(id);
+        if (value != NULL && uuid_parse32(value, uu) == 0) {
+            (void) memcpy(client->last_event_id, uu, sizeof(uuid_t));
+        }
+    }
+
+    cJSON_Delete(response);
+}
+
 #define X_AUTH_HEADER_SIZE      256
 #define SENTRY_PROTOCOL_VER     7
 
@@ -321,6 +349,8 @@ static void post_data(csentry_t *client)
 
     curl_ez_reply rep = curl_ez_post_json(ez, client->store_url, client->ctx, 0);
     if (rep.status_code > 0) {
+        update_event_id(client, &rep);
+
         printf("status code: %d\ndata: %s\n", rep.status_code, rep.data);
         free(rep.data);
     } else {
@@ -379,6 +409,22 @@ void csentry_capture_message(
     free(str);
 
     post_data(client);
+}
+
+void csentry_get_last_event_id(void *client0, uuid_t uuid)
+{
+    csentry_t *client = (csentry_t *) client0;
+    assert_nonnull(client);
+    assert_nonnull(uuid);
+    (void) memcpy(uuid, client->last_event_id, sizeof(uuid_t));
+}
+
+void csentry_get_last_event_id_string(void *client0, uuid_string_t out)
+{
+    csentry_t *client = (csentry_t *) client0;
+    assert_nonnull(client);
+    assert_nonnull(out);
+    uuid_unparse_lower(client->last_event_id, out);
 }
 
 /**

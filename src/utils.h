@@ -6,6 +6,7 @@
 #define CSENTRY_UTILS_H
 
 #include <assert.h>
+#include <uuid/uuid.h>
 
 #ifndef assert_nonnull
 #define assert_nonnull(p)       assert((p) != NULL)
@@ -41,6 +42,8 @@ int strprefix(const char *, const char *);
 #define ISO_8601_BUFSZ      20
 
 void format_iso_8601_time(char *);
+
+int uuid_parse32(const char *, uuid_t);
 
 #endif /* CSENTRY_UTILS_H */
 
