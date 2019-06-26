@@ -245,7 +245,7 @@ void * _nullable csentry_new(
     }
 
     csentry_ctx_clear(client);
-    if (csentry_ctx_merge(client, ctx) != 0) {
+    if (csentry_ctx_update(client, ctx) != 0) {
         errno = ENOTSUP;
         csentry_destroy(client);
         client = NULL;
@@ -381,6 +381,40 @@ void csentry_capture_message(
     post_data(client);
 }
 
+/**
+ * @return      1 if added/updated 0 otherwise
+ */
+static int csentry_ctx_update0(
+        void *client0,
+        const char *name,
+        const cJSON * _nullable data)
+{
+    csentry_t *client = (csentry_t *) client0;
+    cJSON * _nullable copy;
+
+    assert_nonnull(client);
+    assert_nonnull(name);
+
+    if (data == NULL) return 0;
+
+    copy = cJSON_Duplicate(data, 1);
+    /* if copy is NULL, cJSON_AddItemToObject() will do nothing */
+
+    if (cJSON_GetObjectItem(client->ctx, name) == NULL) {
+        cJSON_AddItemToObject(client->ctx, name, copy);
+    } else {
+        /* Replace won't success if name don't exist */
+        cJSON_ReplaceItemInObject(client->ctx, name, copy);
+    }
+
+    if (cJSON_GetObjectItem(client->ctx, name) == NULL) {
+        cJSON_Delete(copy);     /* Prevent potential memory leakage */
+        return 0;
+    }
+
+    return 1;
+}
+
 static int is_known_ctx_name(const char *name)
 {
     assert_nonnull(name);
@@ -402,12 +436,11 @@ static int is_known_ctx_name(const char *name)
  *  https://github.com/DaveGamble/cJSON/issues/167
  *  https://docs.sentry.io/enriching-error-data/context/
  */
-int csentry_ctx_merge(void *client0, const cJSON * _nullable ctx)
+int csentry_ctx_update(void *client0, const cJSON * _nullable ctx)
 {
     int e = 0;
     csentry_t *client = (csentry_t *) client0;
     cJSON *iter;
-    cJSON *copy;
 
     assert_nonnull(client);
     if (ctx == NULL) goto out_exit;
@@ -424,15 +457,7 @@ int csentry_ctx_merge(void *client0, const cJSON * _nullable ctx)
         printf("%s\n", iter->string);
 
         if (is_known_ctx_name(iter->string)) {
-            copy = cJSON_Duplicate(iter, 1);
-
-            if (cJSON_GetObjectItem(client->ctx, iter->string) == NULL) {
-                cJSON_AddItemToObject(client->ctx, iter->string, copy);
-            } else {
-                /* Replace won't success if name don't exist */
-                cJSON_ReplaceItemInObject(client->ctx, iter->string, copy);
-            }
-
+            (void) csentry_ctx_update0(client, iter->string, iter);
             printf("Merging %s into cSentry context\n", iter->string);
         } else if (!strcmp(iter->string, "level")) {
             /* Level is ignored, it make sense only for posting message */
@@ -448,6 +473,21 @@ int csentry_ctx_merge(void *client0, const cJSON * _nullable ctx)
 
 out_exit:
     return e;
+}
+
+int csentry_ctx_update_user(void *client0, const cJSON * _nullable data)
+{
+    return csentry_ctx_update0(client0, "user", data);
+}
+
+int csentry_ctx_update_tags(void *client0, const cJSON * _nullable data)
+{
+    return csentry_ctx_update0(client0, "tags", data);
+}
+
+int csentry_ctx_update_extra(void *client0, const cJSON * _nullable data)
+{
+    return csentry_ctx_update0(client0, "extra", data);
 }
 
 const cJSON *csentry_ctx_get(void *client0)
@@ -477,7 +517,7 @@ int main(void)
     assert_nonnull(json);
 
     int e;
-    e = csentry_ctx_merge(d, json);
+    e = csentry_ctx_update(d, json);
     if (e != 0) {
         printf("%d\n", errno);
     } else {

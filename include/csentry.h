@@ -20,8 +20,11 @@ void csentry_destroy(void *);
 void csentry_capture_message(void *, const cJSON * _nullable, int, const char *);
 
 const cJSON *csentry_ctx_get(void *);
+int csentry_ctx_update_user(void *, const cJSON * _nullable);
+int csentry_ctx_update_tags(void *, const cJSON * _nullable);
+int csentry_ctx_update_extra(void *, const cJSON * _nullable);
+int csentry_ctx_update(void *, const cJSON * _nullable);
 void csentry_ctx_clear(void *);
-int csentry_ctx_merge(void *, const cJSON * _nullable);
 
 #endif /* __CSENTRY_H__ */
 
