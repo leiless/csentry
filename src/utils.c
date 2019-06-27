@@ -69,3 +69,19 @@ int uuid_parse32(const char *in, uuid_t uu)
     return uuid_parse(str, uu);
 }
 
+void pmtx_lock(pthread_mutex_t *mtx)
+{
+    int e;
+    assert_nonnull(mtx);
+    e = pthread_mutex_lock(mtx);
+    assert(e == 0);
+}
+
+void pmtx_unlock(pthread_mutex_t *mtx)
+{
+    int e;
+    assert_nonnull(mtx);
+    e = pthread_mutex_unlock(mtx);
+    assert(e == 0);
+}
+

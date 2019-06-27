@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <uuid/uuid.h>
+#include <pthread.h>
 
 #ifndef assert_nonnull
 #define assert_nonnull(p)       assert((p) != NULL)
@@ -46,6 +47,9 @@ int strprefix(const char *, const char *);
 void format_iso_8601_time(char *);
 
 int uuid_parse32(const char *, uuid_t);
+
+void pmtx_lock(pthread_mutex_t *mtx);
+void pmtx_unlock(pthread_mutex_t *mtx);
 
 #endif /* CSENTRY_UTILS_H */
 

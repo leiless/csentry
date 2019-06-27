@@ -27,9 +27,11 @@ typedef struct {
     const char *pubkey;
     const char *seckey;
     const char *store_url;
-    cJSON *ctx;
     int sample_rate;
+
+    cJSON *ctx;
     uuid_t last_event_id;
+    pthread_mutex_t mtx;    /* Protects ctx and last_event_id */
 } csentry_t;
 
 typedef struct {
@@ -214,6 +216,12 @@ out_exit:
     return e;
 }
 
+/*
+ * static pthread mutex initialization always success by nature
+ * see: https://stackoverflow.com/questions/14320041/pthread-mutex-initializer-vs-pthread-mutex-init-mutex-param
+ */
+static pthread_mutex_t builtin_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /**
  * DSN(Client key) format:
  *  SCHEME://PUBKEY[:SECKEY]@HOST[:PORT]/PROJECT_ID
@@ -245,6 +253,8 @@ void * _nullable csentry_new(
         goto out_exit;
     }
 
+    client->mtx = builtin_mutex;
+
     csentry_ctx_clear(client);
     if (csentry_ctx_update(client, ctx) != 0) {
         errno = ENOTSUP;
@@ -258,7 +268,7 @@ void * _nullable csentry_new(
     printf("\n");
 
     if (install_handlers) {
-        /* TODO */
+        /* TODO: capture sginals */
     }
 
 out_exit:
@@ -272,14 +282,16 @@ void csentry_destroy(void *arg)
         free((void *) client->pubkey);
         free((void *) client->seckey);
         free((void *) client->store_url);
+        pmtx_lock(&client->mtx);
         cJSON_Delete(client->ctx);
+        pmtx_unlock(&client->mtx);
         free(client);
     }
 }
 
 static void update_event_id(csentry_t *client, const curl_ez_reply *rep)
 {
-    cJSON *response;
+    cJSON *json;
     cJSON *id;
     const char *value;
     uuid_t uu;
@@ -290,18 +302,20 @@ static void update_event_id(csentry_t *client, const curl_ez_reply *rep)
     if (rep->status_code != 200) return;
     assert_nonnull(rep->data);
 
-    response = cJSON_Parse(rep->data);
-    if (response == NULL) return;
+    json = cJSON_Parse(rep->data);
+    if (json == NULL) return;
 
-    id = cJSON_GetObjectItem(client->ctx, "id");
+    id = cJSON_GetObjectItem(json, "id");
     if (id != NULL) {
         value = cJSON_GetStringValue(id);
         if (value != NULL && uuid_parse32(value, uu) == 0) {
+            pmtx_lock(&client->mtx);
             (void) memcpy(client->last_event_id, uu, sizeof(uuid_t));
+            pmtx_unlock(&client->mtx);
         }
     }
 
-    cJSON_Delete(response);
+    cJSON_Delete(json);
 }
 
 #define X_AUTH_HEADER_SIZE      256
@@ -402,6 +416,8 @@ void csentry_capture_message(
     assert_nonnull(client);
     assert_nonnull(msg);
 
+    pmtx_lock(&client->mtx);
+
     message_set_level_attr(client, options);
 
     (void) cJSON_AddStringToObject(client->ctx, "message", msg);
@@ -443,6 +459,8 @@ void csentry_capture_message(
     free(str);
 
     post_data(client);
+
+    pmtx_unlock(&client->mtx);
 }
 
 void csentry_get_last_event_id(void *client0, uuid_t uuid)
@@ -450,7 +468,9 @@ void csentry_get_last_event_id(void *client0, uuid_t uuid)
     csentry_t *client = (csentry_t *) client0;
     assert_nonnull(client);
     assert_nonnull(uuid);
+    pmtx_lock(&client->mtx);
     (void) memcpy(uuid, client->last_event_id, sizeof(uuid_t));
+    pmtx_unlock(&client->mtx);
 }
 
 void csentry_get_last_event_id_string(void *client0, uuid_string_t out)
@@ -458,7 +478,9 @@ void csentry_get_last_event_id_string(void *client0, uuid_string_t out)
     csentry_t *client = (csentry_t *) client0;
     assert_nonnull(client);
     assert_nonnull(out);
+    pmtx_lock(&client->mtx);
     uuid_unparse_lower(client->last_event_id, out);
+    pmtx_unlock(&client->mtx);
 }
 
 /**
@@ -469,16 +491,19 @@ static int csentry_ctx_update0(
         const char *name,
         const cJSON * _nullable data)
 {
+    int success = 0;
     csentry_t *client = (csentry_t *) client0;
     cJSON * _nullable copy;
 
     assert_nonnull(client);
     assert_nonnull(name);
 
-    if (data == NULL) return 0;
+    if (data == NULL) goto out_exit;
 
     copy = cJSON_Duplicate(data, 1);
     /* if copy is NULL, cJSON_AddItemToObject() will do nothing */
+
+    pmtx_lock(&client->mtx);
 
     if (cJSON_GetObjectItem(client->ctx, name) == NULL) {
         cJSON_AddItemToObject(client->ctx, name, copy);
@@ -489,10 +514,14 @@ static int csentry_ctx_update0(
 
     if (cJSON_GetObjectItem(client->ctx, name) == NULL) {
         cJSON_Delete(copy);     /* Prevent potential memory leakage */
-        return 0;
+    } else {
+        success = 1;
     }
 
-    return 1;
+    pmtx_unlock(&client->mtx);
+
+out_exit:
+    return success;
 }
 
 static int is_known_ctx_name(const char *name)
@@ -538,6 +567,7 @@ int csentry_ctx_update(void *client0, const cJSON * _nullable ctx)
 
         if (is_known_ctx_name(iter->string)) {
             (void) csentry_ctx_update0(client, iter->string, iter);
+
             printf("Merging %s into cSentry context\n", iter->string);
         } else if (!strcmp(iter->string, "level")) {
             /* Level is ignored, it make sense only for posting message */
@@ -570,6 +600,9 @@ int csentry_ctx_update_extra(void *client0, const cJSON * _nullable data)
     return csentry_ctx_update0(client0, "extra", data);
 }
 
+/*
+ * XXX: access context in multithreading environment is dangerous
+ */
 const cJSON *csentry_ctx_get(void *client0)
 {
     csentry_t *client = (csentry_t *) client0;
@@ -583,9 +616,11 @@ void csentry_ctx_clear(void *client0)
     csentry_t *client = (csentry_t *) client0;
     assert_nonnull(client);
 
+    pmtx_lock(&client->mtx);
     cJSON_Delete(client->ctx);
     client->ctx = cJSON_CreateObject();
     assert_nonnull(client->ctx);
+    pmtx_unlock(&client->mtx);
 }
 
 int main(void)
