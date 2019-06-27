@@ -12,6 +12,8 @@
 #define assert_nonnull(p)       assert((p) != NULL)
 #endif
 
+#define ARRAY_SIZE(a)           (sizeof(a) / sizeof(*(a)))
+
 /**
  * Should only used for `char[]'  NOT `char *'
  * Assume ends with null byte('\0')

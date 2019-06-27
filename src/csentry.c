@@ -360,6 +360,21 @@ static void post_data(csentry_t *client)
     curl_ez_free(ez);
 }
 
+static const char *sentry_levels[] = {
+    "debug", "info", "warning", "fatal",
+};
+
+#define OPTIONS_TO_LEVEL(opt)   ((opt) >> 29)
+
+static void message_set_level_attr(csentry_t *client, uint32_t options)
+{
+    uint32_t i = OPTIONS_TO_LEVEL(options);
+    /* Default level is error, we'll skip it since it's optinal */
+    if (i > 0 && i <= ARRAY_SIZE(sentry_levels)) {
+        (void) cJSON_AddStringToObject(client->ctx, "level", sentry_levels[i-1]);
+    }
+}
+
 /**
  * char buf[1];
  * int n = vsnprintf(buf, 1, fmt, ap);
@@ -374,7 +389,7 @@ static void post_data(csentry_t *client)
 void csentry_capture_message(
         void *client0,
         const cJSON * _nullable attrs,
-        int options,
+        uint32_t options,
         const char *msg)
 {
     csentry_t *client = (csentry_t *) client0;
@@ -385,24 +400,33 @@ void csentry_capture_message(
     assert_nonnull(client);
     assert_nonnull(msg);
 
-    UNUSED(options, attrs);
+    UNUSED(attrs);
+
+    message_set_level_attr(client, options);
 
     (void) cJSON_AddStringToObject(client->ctx, "message", msg);
     uuid_generate(u);
     uuid_unparse_lower(u, uuid);
+    /*
+     * [sic] Hexadecimal string representing a uuid4 value.
+     * The length is exactly 32 characters. Dashes are not allowed.
+     *
+     * XXX: as tested, uuid string with dashes is acceptable for Sentry server
+     */
     (void) cJSON_AddStringToObject(client->ctx, "event_id", uuid);
 
-    (void) cJSON_AddStringToObject(client->ctx, "logger", "builtin");
-    (void) cJSON_AddStringToObject(client->ctx, "platform", "c");
     format_iso_8601_time(ts);
     (void) cJSON_AddStringToObject(client->ctx, "timestamp", ts);
 
-    cJSON *sdk = cJSON_CreateObject();
-    assert_nonnull(sdk);
-    (void) cJSON_AddStringToObject(sdk, "name", CSENTRY_NAME);
-    (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
+    (void) cJSON_AddStringToObject(client->ctx, "logger", "builtin");
+    (void) cJSON_AddStringToObject(client->ctx, "platform", "c");
 
-    cJSON_AddItemReferenceToObject(client->ctx, "sdk", sdk);
+    cJSON *sdk = cJSON_CreateObject();
+    if (sdk != NULL) {
+        (void) cJSON_AddStringToObject(sdk, "name", CSENTRY_NAME);
+        (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
+        cJSON_AddItemReferenceToObject(client->ctx, "sdk", sdk);
+    }
 
     char *str = cJSON_Print(client->ctx);
     printf("%s\n", str);

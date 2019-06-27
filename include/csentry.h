@@ -14,10 +14,15 @@
 
 #define CSENTRY_CAPTURE_ASYNC       0x1
 
+#define CSENTRY_LEVEL_DEBUG         0x10000000
+#define CSENTRY_LEVEL_INFO          0x20000000
+#define CSENTRY_LEVEL_WARN          0x30000000
+#define CSENTRY_LEVEL_FATAL         0x40000000
+
 void * _nullable csentry_new(const char *, const cJSON * _nullable, float, int);
 void csentry_destroy(void *);
 
-void csentry_capture_message(void *, const cJSON * _nullable, int, const char *);
+void csentry_capture_message(void *, const cJSON * _nullable, uint32_t, const char *);
 void csentry_get_last_event_id(void *, uuid_t);
 void csentry_get_last_event_id_string(void *, uuid_string_t);
 
