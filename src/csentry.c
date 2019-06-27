@@ -483,6 +483,16 @@ void csentry_get_last_event_id_string(void *client0, uuid_string_t out)
     pmtx_unlock(&client->mtx);
 }
 
+static int is_simple_json_type(const cJSON *j)
+{
+    assert_nonnull(j);
+    return cJSON_IsBool(j) ||
+            cJSON_IsNull(j) ||
+            cJSON_IsNumber(j) ||
+            cJSON_IsString(j) ||
+            cJSON_IsRaw(j);
+}
+
 /**
  * @return      1 if Sentry context has been modified
  */
@@ -514,6 +524,12 @@ static int csentry_ctx_update0(
             copy = cJSON_Duplicate(iter, 1);
 
             if (cJSON_GetObjectItem(name_json, iter->string) != NULL) {
+                if (name_json->type != iter->type || is_simple_json_type(iter)) {
+                    /* Overwrite if type different */
+                } else {
+                    /* Merge array or object(recursively) */
+                }
+
                 cJSON_ReplaceItemInObject(name_json, iter->string, copy);
             } else {
                 cJSON_AddItemToObject(name_json, iter->string, copy);
