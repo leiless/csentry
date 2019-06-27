@@ -484,15 +484,17 @@ void csentry_get_last_event_id_string(void *client0, uuid_string_t out)
 }
 
 /**
- * @return      1 if added/updated 0 otherwise
+ * @return      1 if Sentry context has been modified
  */
 static int csentry_ctx_update0(
         void *client0,
         const char *name,
         const cJSON * _nullable data)
 {
-    int success = 0;
+    int dirty = 0;
     csentry_t *client = (csentry_t *) client0;
+    cJSON *name_json;
+    cJSON *iter;
     cJSON * _nullable copy;
 
     assert_nonnull(client);
@@ -500,28 +502,46 @@ static int csentry_ctx_update0(
 
     if (data == NULL) goto out_exit;
 
-    copy = cJSON_Duplicate(data, 1);
     /* if copy is NULL, cJSON_AddItemToObject() will do nothing */
 
     pmtx_lock(&client->mtx);
 
-    if (cJSON_GetObjectItem(client->ctx, name) == NULL) {
-        cJSON_AddItemToObject(client->ctx, name, copy);
-    } else {
-        /* Replace won't success if name don't exist */
-        cJSON_ReplaceItemInObject(client->ctx, name, copy);
-    }
+    name_json = cJSON_GetObjectItem(client->ctx, name);
+    if (name_json != NULL) {
+        cJSON_ArrayForEach(iter, data) {
+            if (iter->string == NULL) continue;
 
-    if (cJSON_GetObjectItem(client->ctx, name) == NULL) {
-        cJSON_Delete(copy);     /* Prevent potential memory leakage */
+            copy = cJSON_Duplicate(iter, 1);
+
+            if (cJSON_GetObjectItem(name_json, iter->string) != NULL) {
+                cJSON_ReplaceItemInObject(name_json, iter->string, copy);
+            } else {
+                cJSON_AddItemToObject(name_json, iter->string, copy);
+            }
+
+            if (cJSON_GetObjectItem(name_json, iter->string) == NULL) {
+                cJSON_Delete(copy);
+            } else {
+                /* TODO: check if cJSON_GetObjectItem() is equals to `copy' */
+                dirty = 1;
+            }
+        }
     } else {
-        success = 1;
+        copy = cJSON_Duplicate(data, 1);
+
+        cJSON_AddItemToObject(client->ctx, name, copy);
+
+        if (cJSON_GetObjectItem(client->ctx, name) == NULL) {
+            cJSON_Delete(copy);     /* Prevent potential memory leakage */
+        } else {
+            dirty = 1;
+        }
     }
 
     pmtx_unlock(&client->mtx);
 
 out_exit:
-    return success;
+    return dirty;
 }
 
 static int is_known_ctx_name(const char *name)
