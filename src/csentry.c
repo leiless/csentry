@@ -396,11 +396,11 @@ void csentry_capture_message(
     uuid_t u;
     uuid_string_t uuid;
     char ts[ISO_8601_BUFSZ];
+    cJSON *sdk;
+    cJSON *json;
 
     assert_nonnull(client);
     assert_nonnull(msg);
-
-    UNUSED(attrs);
 
     message_set_level_attr(client, options);
 
@@ -418,14 +418,24 @@ void csentry_capture_message(
     format_iso_8601_time(ts);
     (void) cJSON_AddStringToObject(client->ctx, "timestamp", ts);
 
-    (void) cJSON_AddStringToObject(client->ctx, "logger", "builtin");
+    (void) cJSON_AddStringToObject(client->ctx, "logger", "(builtin)");
     (void) cJSON_AddStringToObject(client->ctx, "platform", "c");
 
-    cJSON *sdk = cJSON_CreateObject();
+    sdk = cJSON_CreateObject();
     if (sdk != NULL) {
         (void) cJSON_AddStringToObject(sdk, "name", CSENTRY_NAME);
         (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
         cJSON_AddItemReferenceToObject(client->ctx, "sdk", sdk);
+    }
+
+    if (cJSON_IsObject(attrs)) {
+        json = cJSON_GetObjectItem(attrs, "logger");
+        if (cJSON_IsString(json)) {
+            (void) cJSON_AddStringToObject(client->ctx, "logger", cJSON_GetStringValue(json));
+        }
+
+        json = cJSON_GetObjectItem(attrs, "context");
+        if (json != NULL) (void) csentry_ctx_update(client, json);
     }
 
     char *str = cJSON_Print(client->ctx);
