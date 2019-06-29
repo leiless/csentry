@@ -483,16 +483,6 @@ void csentry_get_last_event_id_string(void *client0, uuid_string_t out)
     pmtx_unlock(&client->mtx);
 }
 
-static int is_simple_json_type(const cJSON *j)
-{
-    assert_nonnull(j);
-    return cJSON_IsBool(j) ||
-            cJSON_IsNull(j) ||
-            cJSON_IsNumber(j) ||
-            cJSON_IsString(j) ||
-            cJSON_IsRaw(j);
-}
-
 /**
  * @return      1 if Sentry context has been modified
  */
@@ -512,8 +502,6 @@ static int csentry_ctx_update0(
 
     if (data == NULL) goto out_exit;
 
-    /* if copy is NULL, cJSON_AddItemToObject() will do nothing */
-
     pmtx_lock(&client->mtx);
 
     name_json = cJSON_GetObjectItem(client->ctx, name);
@@ -523,34 +511,19 @@ static int csentry_ctx_update0(
 
             copy = cJSON_Duplicate(iter, 1);
 
-            if (cJSON_GetObjectItem(name_json, iter->string) != NULL) {
-                if (name_json->type != iter->type || is_simple_json_type(iter)) {
-                    /* Overwrite if type different */
-                } else {
-                    /* Merge array or object(recursively) */
-                }
-
-                cJSON_ReplaceItemInObject(name_json, iter->string, copy);
-            } else {
-                cJSON_AddItemToObject(name_json, iter->string, copy);
-            }
-
-            if (cJSON_GetObjectItem(name_json, iter->string) == NULL) {
-                cJSON_Delete(copy);
-            } else {
-                /* TODO: check if cJSON_GetObjectItem() is equals to `copy' */
+            if (cjson_add_or_update(name_json, iter->string, copy)) {
                 dirty = 1;
+            } else {
+                cJSON_Delete(copy);
             }
         }
     } else {
         copy = cJSON_Duplicate(data, 1);
 
-        cJSON_AddItemToObject(client->ctx, name, copy);
-
-        if (cJSON_GetObjectItem(client->ctx, name) == NULL) {
-            cJSON_Delete(copy);     /* Prevent potential memory leakage */
-        } else {
+        if (cjson_add_object(client->ctx, name, copy)) {
             dirty = 1;
+        } else {
+            cJSON_Delete(copy);
         }
     }
 

@@ -85,3 +85,36 @@ void pmtx_unlock(pthread_mutex_t *mtx)
     assert(e == 0);
 }
 
+/**
+ * Add/update an object to json in a non-atomic way
+ * @return      1 if added/updated 0 otherwise
+ */
+int cjson_add_or_update(cJSON *json, const char *name, cJSON * _nullable item)
+{
+    assert_nonnull(json);
+    assert_nonnull(name);
+
+    if (item == NULL) return 0;
+
+    /* if `item' is NULL, cJSON_AddItemToObject(), cJSON_ReplaceItemInObject() will do nothing */
+
+    if (cJSON_GetObjectItem(json, name) != NULL) {
+        cJSON_ReplaceItemInObject(json, name, item);
+    } else {
+        cJSON_AddItemToObject(json, name, item);
+    }
+
+    return cJSON_GetObjectItem(json, name) == item;
+}
+
+int cjson_add_object(cJSON *json, const char *name, cJSON * _nullable item)
+{
+    assert_nonnull(json);
+    assert_nonnull(name);
+    if (item != NULL) {
+        cJSON_AddItemToObject(json, name, item);
+        return cJSON_GetObjectItem(json, name) == item;
+    }
+    return 0;
+}
+

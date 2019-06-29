@@ -9,6 +9,8 @@
 #include <uuid/uuid.h>
 #include <pthread.h>
 
+#include <cjson/cJSON.h>
+
 #ifndef assert_nonnull
 #define assert_nonnull(p)       assert((p) != NULL)
 #endif
@@ -50,6 +52,9 @@ int uuid_parse32(const char *, uuid_t);
 
 void pmtx_lock(pthread_mutex_t *mtx);
 void pmtx_unlock(pthread_mutex_t *mtx);
+
+int cjson_add_or_update(cJSON *, const char *, cJSON * _nullable);
+int cjson_add_object(cJSON *, const char *, cJSON * _nullable);
 
 #endif /* CSENTRY_UTILS_H */
 
