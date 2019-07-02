@@ -49,6 +49,7 @@ int strprefix(const char *, const char *);
 void format_iso_8601_time(char *);
 
 int uuid_parse32(const char *, uuid_t);
+void uuid_string_random(uuid_string_t);
 
 void pmtx_lock(pthread_mutex_t *mtx);
 void pmtx_unlock(pthread_mutex_t *mtx);

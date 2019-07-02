@@ -463,6 +463,115 @@ void csentry_capture_message(
     pmtx_unlock(&client->mtx);
 }
 
+/**
+ * see: https://docs.sentry.io/enriching-error-data/breadcrumbs/?platform=csharp
+ */
+void csentry_add_breadcrumb(
+        void *client0,
+        const char *msg,
+        const cJSON * _nullable attrs,
+        uint32_t options)
+{
+    csentry_t *client = (csentry_t *) client0;
+    cJSON *breadcrumb;
+    uuid_string_t uuid;
+    char ts[ISO_8601_BUFSZ];
+    cJSON *json;
+    cJSON *cp;
+    cJSON *values;
+
+    assert_nonnull(client);
+    assert_nonnull(msg);
+
+    breadcrumb = cJSON_CreateObject();
+    if (breadcrumb == NULL) return;     /* TODO */
+
+    uuid_string_random(uuid);
+
+    (void) cJSON_AddStringToObject(breadcrumb, "message", msg);
+    (void) cJSON_AddStringToObject(breadcrumb, "event_id", uuid);
+
+    format_iso_8601_time(ts);
+    (void) cJSON_AddStringToObject(breadcrumb, "timestamp", ts);
+
+    (void) cJSON_AddStringToObject(breadcrumb, "category", "(builtin)");
+    (void) cJSON_AddStringToObject(breadcrumb, "level", "info");
+    (void) cJSON_AddStringToObject(breadcrumb, "type", "default");
+
+    UNUSED(options);
+
+    if (cJSON_IsObject(attrs)) {
+        json = cJSON_GetObjectItem(attrs, "category");
+        if (cJSON_IsString(json)) {
+            cp = cJSON_Duplicate(json, 1);
+            if (!cjson_add_or_update(breadcrumb, "category", cp)) {
+                cJSON_Delete(cp);
+            }
+        }
+
+        /* TODO: merge level and type into `options' */
+
+        json = cJSON_GetObjectItem(attrs, "level");
+        if (cJSON_IsString(json)) {
+            cp = cJSON_Duplicate(json, 1);
+            if (!cjson_add_or_update(breadcrumb, "level", cp)) {
+                cJSON_Delete(cp);
+            }
+        }
+
+        json = cJSON_GetObjectItem(attrs, "type");
+        if (cJSON_IsString(json)) {
+            cp = cJSON_Duplicate(json, 1);
+            if (!cjson_add_or_update(breadcrumb, "type", cp)) {
+                cJSON_Delete(cp);
+            }
+        }
+
+        json = cJSON_GetObjectItem(attrs, "data");
+        if (json != NULL) {
+            cp = cJSON_Duplicate(json, 1);
+            if (!cjson_add_or_update(breadcrumb, "data", cp)) {
+                cJSON_Delete(cp);
+            }
+        }
+    }
+
+    pmtx_lock(&client->mtx);
+
+    json = cJSON_GetObjectItem(client->ctx, "breadcrumbs");
+    if (cJSON_IsObject(json)) {
+        values = cJSON_GetObjectItem(json, "values");
+
+        if (cJSON_IsArray(values)) {
+            cJSON_AddItemToArray(values, breadcrumb);
+        } else if (values != NULL) {
+            cJSON_ReplaceItemInObject(json, "values", breadcrumb);
+        } else {
+            goto out_add_values;
+        }
+    } else if (json == NULL) {
+out_add_values:
+        values = cJSON_CreateObject();
+
+        if (values != NULL) {
+            if (!cjson_add_object(values, "values", breadcrumb)) {
+                cJSON_Delete(breadcrumb);
+                cJSON_Delete(values);
+                goto out_unlock;
+            }
+
+            if (!cjson_add_object(client->ctx, "breadcrumbs", values)) {
+                /* `breadbrumb' is ready attached to `values' */
+                cJSON_Delete(values);
+                goto out_unlock;
+            }
+        }
+    }
+
+out_unlock:
+    pmtx_unlock(&client->mtx);
+}
+
 void csentry_get_last_event_id(void *client0, uuid_t uuid)
 {
     csentry_t *client = (csentry_t *) client0;

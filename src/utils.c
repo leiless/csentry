@@ -69,6 +69,19 @@ int uuid_parse32(const char *in, uuid_t uu)
     return uuid_parse(str, uu);
 }
 
+/**
+ * Generate random UUID string
+ * @param str   [OUT] UUID string
+ */
+void uuid_string_random(uuid_string_t str)
+{
+    uuid_t uu;
+    assert_nonnull(str);
+    uuid_generate(uu);
+    uuid_unparse_lower(uu, str);
+}
+
+
 void pmtx_lock(pthread_mutex_t *mtx)
 {
     int e;
