@@ -565,6 +565,8 @@ out_add_values:
                 cJSON_Delete(values);
                 goto out_unlock;
             }
+        } else {
+            cJSON_Delete(breadcrumb);
         }
     }
 
