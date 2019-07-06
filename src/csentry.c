@@ -324,7 +324,7 @@ void csentry_debug(void *client0)
     free(ctx);
 }
 
-static void update_event_id(csentry_t *client, const curl_ez_reply *rep)
+static void update_last_event_id(csentry_t *client, const curl_ez_reply *rep)
 {
     cJSON *json;
     cJSON *id;
@@ -397,7 +397,7 @@ static void post_data(csentry_t *client)
 
     curl_ez_reply rep = curl_ez_post_json(ez, client->store_url, client->ctx, 0);
     if (rep.status_code > 0) {
-        update_event_id(client, &rep);
+        update_last_event_id(client, &rep);
 
         printf("status code: %d\ndata: %s\n", rep.status_code, rep.data);
         free(rep.data);
@@ -514,6 +514,7 @@ void csentry_add_breadcrumb(
     cJSON *json;
     cJSON *cp;
     cJSON *values;
+    cJSON *arr;
 
     assert_nonnull(client);
     assert_nonnull(msg);
@@ -587,20 +588,26 @@ void csentry_add_breadcrumb(
     } else if (json == NULL) {
 out_add_values:
         values = cJSON_CreateObject();
+        arr = cJSON_CreateArray();
 
-        if (values != NULL) {
-            if (!cjson_add_object(values, "values", breadcrumb)) {
-                cJSON_Delete(breadcrumb);
+        if (values != NULL && arr != NULL) {
+            cJSON_AddItemToArray(arr, breadcrumb);   /* Always success */
+
+            if (!cjson_add_object(values, "values", arr)) {
+                /* `breadbrumb' is ready attached to `arr' */
+                cJSON_Delete(arr);
                 cJSON_Delete(values);
                 goto out_unlock;
             }
 
-            if (!cjson_add_object(client->ctx, "breadcrumbs", values)) {
-                /* `breadbrumb' is ready attached to `values' */
+            if (!cjson_add_or_update(client->ctx, "breadcrumbs", values)) {
+                /* `arr' is ready attached to `values' */
                 cJSON_Delete(values);
                 goto out_unlock;
             }
         } else {
+            cJSON_Delete(arr);
+            cJSON_Delete(values);
             cJSON_Delete(breadcrumb);
         }
     }

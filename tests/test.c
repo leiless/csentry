@@ -24,6 +24,8 @@ static void baseline_test(void)
     uuid_t u;
     uuid_string_t uu1;
     uuid_string_t uu2;
+    const cJSON *ctx;
+    char *ctx_str;
 
     handle = csentry_new("", NULL, 1.0, 0);
     assert(handle == NULL);
@@ -47,13 +49,38 @@ static void baseline_test(void)
     assert(!strcmp(uu1, uu2));
     LOG("Last event id: %s", uu1);
     csentry_debug(handle);
+
+    ctx = csentry_ctx_get(handle);
+    assert_nonnull(ctx);
+    ctx_str = cJSON_Print(ctx);
+    LOG("ctx: %p %s", ctx, ctx_str);
+    free(ctx_str);
+
+    csentry_destroy(handle);
+}
+
+static void breadcrumb_test(void)
+{
+    void *handle;
+
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.9, 0);
+    assert_nonnull(handle);
+
+    csentry_add_breadcrumb(handle, "it's a breadcrumb", NULL, 0);
+    csentry_capture_message(handle, NULL, 0, "hello world...");
+
+    csentry_debug(handle);
+
+    csentry_destroy(handle);
 }
 
 int main(void)
 {
     LOG_DBG("Debug build");
 
-    baseline_test();
+    //baseline_test();
+    UNUSED(baseline_test);
+    breadcrumb_test();
 
     LOG("Pass!");
     return 0;
