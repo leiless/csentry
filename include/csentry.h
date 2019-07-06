@@ -8,6 +8,11 @@
 #define __CSENTRY_H__
 
 #include <cjson/cJSON.h>
+#include <uuid/uuid.h>
+
+#ifndef _nullable
+#define _nullable                   /* Pseudo annotation */
+#endif
 
 #define CSENTRY_NAME                "cSentry"
 #define CSENTRY_VERSION             "0.1"

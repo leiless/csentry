@@ -41,12 +41,13 @@ find_package(cjson REQUIRED)
 
 set(LIBS curl cjson)
 
-add_executable(csentry
-        include/csentry.h
-        src/curl_ez.h
-        src/utils.h
-        src/utils.c
+add_executable(test
+    include/csentry.h
     src/csentry.c
+    src/curl_ez.h
+    src/utils.h
+    src/utils.c
+    tests/test.c
 )
-target_link_libraries(csentry ${LIBS})
+target_link_libraries(test ${LIBS})
 

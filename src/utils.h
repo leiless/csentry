@@ -29,7 +29,9 @@
 
 #define UNUSED(e, ...)          (void) ((void) (e), ##__VA_ARGS__)
 
-#define _nullable               /* Pseudo annotation */
+#ifndef _nullable
+#define _nullable                   /* Pseudo annotation */
+#endif
 
 #define set_error_and_jump(var, val, label)     \
     do {                                        \

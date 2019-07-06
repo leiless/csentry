@@ -743,32 +743,3 @@ void csentry_ctx_clear(void *client0)
     pmtx_unlock(&client->mtx);
 }
 
-int main(void)
-{
-    void *d = csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 1.0, 0);
-    assert_nonnull(d);
-
-    cJSON *json = cJSON_Parse("{\"array\":[1,2,3],\"boolean\":true,\"color\":\"#82b92c\",\"level\":null,\"number\":123,\"user\":{\"a\":\"b\",\"c\":\"d\",\"e\":\"f\"},\"string\":\"HelloWorld\"}");
-    assert_nonnull(json);
-
-    int e;
-    e = csentry_ctx_update(d, json);
-    if (e != 0) {
-        printf("%d\n", errno);
-    } else {
-        char *str = cJSON_Print(csentry_ctx_get(d));
-        assert_nonnull(str);
-        printf("%s\n", str);
-        free(str);
-    }
-
-    exit(0);
-
-    void *d1 = csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 1.0, 0);
-    void *d2 = csentry_new("http://93ea558ffecdcee3ca9e7fab8927:be7e8d34da87071eb8c36eab55460f98@sentry.io:8080/159723482", NULL, 0, 0);
-
-    csentry_capture_message(d1, NULL, 0, "hello");
-    csentry_capture_message(d2, NULL, 0, "world");
-    return 0;
-}
-
