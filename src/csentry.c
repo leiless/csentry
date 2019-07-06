@@ -264,7 +264,7 @@ void * _nullable csentry_new(
     }
 
     client->sample_rate = (int) (sample_rate * 100);
-    printf("sample_rate: %d\n", client->sample_rate);
+    printf("> sample_rate: %d\n", client->sample_rate);
     printf("\n");
 
     if (install_handlers) {
@@ -282,11 +282,46 @@ void csentry_destroy(void *arg)
         free((void *) client->pubkey);
         free((void *) client->seckey);
         free((void *) client->store_url);
-        pmtx_lock(&client->mtx);
+
+        /* TODO: seems no need to protect ctx-freeing */
+        //pmtx_lock(&client->mtx);
         cJSON_Delete(client->ctx);
-        pmtx_unlock(&client->mtx);
+        //pmtx_unlock(&client->mtx);
+
         free(client);
     }
+}
+
+/**
+ * Print internal cSentry objects to stderr(debug purpose)
+ */
+void csentry_debug(void *client0)
+{
+    csentry_t *client = (csentry_t *) client0;
+    uuid_string_t uu;
+    char *ctx;
+
+    if (client == NULL) {
+        fprintf(stderr, "%s() called with NULL argument, do nop.\n", __func__);
+        return;
+    }
+
+    uuid_unparse_lower(client->last_event_id, uu);
+    ctx = cJSON_Print(client->ctx);
+
+    fprintf(stderr, "cSentry handle: %p\n"
+                    "\tpubkey: %s\n"
+                    "\tseckey: %s\n"
+                    "\tstore_url: %s\n"
+                    "\tsample_rate: %d\n"
+                    "\tctx: %p %s\n"
+                    "\tlast_event_id: %s\n"
+                    "\tmtx: %p\n",
+            client, client->pubkey, client->seckey,
+            client->store_url, client->sample_rate,
+            client->ctx, ctx, uu, &client->mtx);
+
+    free(ctx);
 }
 
 static void update_event_id(csentry_t *client, const curl_ez_reply *rep)
@@ -309,9 +344,8 @@ static void update_event_id(csentry_t *client, const curl_ez_reply *rep)
     if (id != NULL) {
         value = cJSON_GetStringValue(id);
         if (value != NULL && uuid_parse32(value, uu) == 0) {
-            pmtx_lock(&client->mtx);
+            /* XXX: client->mtx already locked previously */
             (void) memcpy(client->last_event_id, uu, sizeof(uuid_t));
-            pmtx_unlock(&client->mtx);
         }
     }
 
@@ -375,6 +409,7 @@ static void post_data(csentry_t *client)
 }
 
 static const char *sentry_levels[] = {
+    /* Default level is error */
     "debug", "info", "warning", "fatal",
 };
 

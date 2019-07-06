@@ -19,13 +19,18 @@
 
 #define CSENTRY_CAPTURE_ASYNC       0x1
 
-#define CSENTRY_LEVEL_DEBUG         0x10000000
-#define CSENTRY_LEVEL_INFO          0x20000000
-#define CSENTRY_LEVEL_WARN          0x30000000
-#define CSENTRY_LEVEL_FATAL         0x40000000
+/*
+ * Most significant 3 bits denoted log level
+ * Hence at most 8 levels can be supported
+ */
+#define CSENTRY_LEVEL_DEBUG         0x20000000
+#define CSENTRY_LEVEL_INFO          0x40000000
+#define CSENTRY_LEVEL_WARN          0x60000000
+#define CSENTRY_LEVEL_FATAL         0x80000000
 
 void * _nullable csentry_new(const char *, const cJSON * _nullable, float, int);
 void csentry_destroy(void *);
+void csentry_debug(void *);
 
 void csentry_capture_message(void *, const cJSON * _nullable, uint32_t, const char *);
 void csentry_add_breadcrumb(void *, const char *, const cJSON *, uint32_t);

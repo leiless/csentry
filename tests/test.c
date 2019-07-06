@@ -1,33 +1,61 @@
-//
-// Created by Lei on 2019-07-06.
-//
+/*
+ * Created 190706 lynnl
+ *
+ * Test code for cSentry client
+ */
 
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "../include/csentry.h"
 #include "../src/utils.h"
 
+#define LOG(fmt, ...)       (void) printf("[INFO] " fmt "\n", ##__VA_ARGS__)
+#define LOG_ERR(fmt, ...)   (void) fprintf(stderr, "[ERR] " fmt "\n", ##__VA_ARGS__)
+#ifdef DEBUG
+#define LOG_DBG(fmt, ...)   (void) printf("[DBG] " fmt "\n", ##__VA_ARGS__)
+#endif
+
+static void baseline_test(void)
+{
+    void *handle;
+    uuid_t u;
+    uuid_string_t uu1;
+    uuid_string_t uu2;
+
+    handle = csentry_new("", NULL, 1.0, 0);
+    assert(handle == NULL);
+    csentry_debug(handle);
+    csentry_destroy(handle);
+
+    handle = csentry_new("http://35fe8d8277744ef7925c4784cb2e1d39:a5f54e0ce4774d1b968d612eca4131df@sentry.io:8080/123", NULL, 0.25, 0);
+    assert_nonnull(handle);
+    csentry_debug(handle);
+    csentry_destroy(handle);
+
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.9, 0);
+    assert_nonnull(handle);
+    csentry_debug(handle);
+    csentry_ctx_clear(handle);
+
+    csentry_capture_message(handle, NULL, CSENTRY_LEVEL_DEBUG, "hello world");
+    csentry_get_last_event_id(handle, u);
+    csentry_get_last_event_id_string(handle, uu1);
+    uuid_unparse_lower(u, uu2);
+    assert(!strcmp(uu1, uu2));
+    LOG("Last event id: %s", uu1);
+    csentry_debug(handle);
+}
+
 int main(void)
 {
-    void *d = csentry_new("https://a267a83de2c4a2d80bc41f91d8ef38@sentry.io:80/159723608", NULL, 1.0, 0);
-    assert_nonnull(d);
+    LOG_DBG("Debug build");
 
-    cJSON *json = cJSON_Parse("{\"array\":[1,2,3],\"boolean\":true,\"color\":\"#82b92c\",\"level\":null,\"number\":123,\"user\":{\"a\":\"b\",\"c\":\"d\",\"e\":\"f\"},\"string\":\"HelloWorld\"}");
-    assert_nonnull(json);
+    baseline_test();
 
-    int e;
-    e = csentry_ctx_update(d, json);
-    if (e != 0) {
-        printf("%d\n", errno);
-    } else {
-        char *str = cJSON_Print(csentry_ctx_get(d));
-        assert_nonnull(str);
-        printf("%s\n", str);
-        free(str);
-    }
-
-    exit(0);
+    LOG("Pass!");
+    return 0;
 }
 
