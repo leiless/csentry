@@ -151,6 +151,36 @@ cJSON * _nullable cjson_add_or_update_str_to_obj(
     return cJSON_AddStringToObject(obj, name, str);
 }
 
+/**
+ * Provides similar functionality to cjson_add_or_update_str_to_obj()
+ * Yet we'll try to reduce memory footprint by comparing if existing value equals
+ */
+cJSON * _nullable cjson_add_or_update_str_to_obj_x(
+        cJSON *obj,
+        const char *name,
+        const char *str)
+{
+    cJSON *item;
+
+    assert_nonnull(obj);
+    assert_nonnull(name);
+    assert_nonnull(str);
+
+    item = cJSON_GetObjectItem(obj, name);
+    if (item != NULL) {
+        if (cJSON_IsString(item)) {
+            /* Try to reduce memory alloc/free footprint */
+            if (!strcmp(str, cJSON_GetStringValue(item))) return item;
+        }
+
+        item = cJSON_CreateString(str);
+        (void) cJSON_ReplaceItemInObject(obj, name, item);
+        return item;
+    }
+
+    return cJSON_AddStringToObject(obj, name, str);
+}
+
 cJSON * _nullable cjson_set_default_str_to_obj(
         cJSON *obj,
         const char *name,

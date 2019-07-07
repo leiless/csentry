@@ -63,6 +63,10 @@ cJSON * _nullable cjson_add_or_update_str_to_obj(
     cJSON *, const char *, const char *
 );
 
+cJSON * _nullable cjson_add_or_update_str_to_obj_x(
+    cJSON *, const char *, const char *
+);
+
 cJSON * _nullable cjson_set_default_str_to_obj(
     cJSON *, const char *, const char *
 );

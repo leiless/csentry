@@ -495,7 +495,7 @@ void csentry_capture_message(
     if (cJSON_IsObject(attrs)) {
         json = cJSON_GetObjectItem(attrs, "logger");
         if (cJSON_IsString(json)) {
-            (void) cjson_add_or_update_str_to_obj(client->ctx, "logger", cJSON_GetStringValue(json));
+            (void) cjson_add_or_update_str_to_obj_x(client->ctx, "logger", cJSON_GetStringValue(json));
         }
 
         json = cJSON_GetObjectItem(attrs, "context");
