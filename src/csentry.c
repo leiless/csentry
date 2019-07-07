@@ -576,7 +576,7 @@ void csentry_add_breadcrumb(
         json = cJSON_GetObjectItem(attrs, "category");
         if (cJSON_IsString(json)) {
             cp = cJSON_Duplicate(json, 1);
-            if (!cjson_add_or_update(breadcrumb, "category", cp)) {
+            if (!cjson_add_or_update_object(breadcrumb, "category", cp)) {
                 cJSON_Delete(cp);
             }
         }
@@ -586,7 +586,7 @@ void csentry_add_breadcrumb(
         json = cJSON_GetObjectItem(attrs, "data");
         if (json != NULL) {
             cp = cJSON_Duplicate(json, 1);
-            if (!cjson_add_or_update(breadcrumb, "data", cp)) {
+            if (!cjson_add_or_update_object(breadcrumb, "data", cp)) {
                 cJSON_Delete(cp);
             }
         }
@@ -620,7 +620,7 @@ out_add_values:
                 goto out_unlock;
             }
 
-            if (!cjson_add_or_update(client->ctx, "breadcrumbs", values)) {
+            if (!cjson_add_or_update_object(client->ctx, "breadcrumbs", values)) {
                 /* `arr' is ready attached to `values' */
                 cJSON_Delete(values);
                 goto out_unlock;
@@ -684,7 +684,7 @@ static int csentry_ctx_update0(
 
             copy = cJSON_Duplicate(iter, 1);
 
-            if (cjson_add_or_update(name_json, iter->string, copy)) {
+            if (cjson_add_or_update_object(name_json, iter->string, copy)) {
                 dirty = 1;
             } else {
                 cJSON_Delete(copy);

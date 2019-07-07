@@ -102,7 +102,7 @@ void pmtx_unlock(pthread_mutex_t *mtx)
  * Add/update an object to json in a non-atomic way
  * @return      1 if added/updated 0 otherwise
  */
-int cjson_add_or_update(cJSON *json, const char *name, cJSON * _nullable item)
+int cjson_add_or_update_object(cJSON *json, const char *name, cJSON * _nullable item)
 {
     assert_nonnull(json);
     assert_nonnull(name);

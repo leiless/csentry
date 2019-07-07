@@ -56,7 +56,7 @@ void uuid_string_random(uuid_string_t);
 void pmtx_lock(pthread_mutex_t *mtx);
 void pmtx_unlock(pthread_mutex_t *mtx);
 
-int cjson_add_or_update(cJSON *, const char *, cJSON * _nullable);
+int cjson_add_or_update_object(cJSON *, const char *, cJSON * _nullable);
 int cjson_add_object(cJSON *, const char *, cJSON * _nullable);
 
 #endif /* CSENTRY_UTILS_H */
