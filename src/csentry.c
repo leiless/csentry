@@ -314,12 +314,12 @@ void csentry_debug(void *client0)
                     "\tseckey: %s\n"
                     "\tstore_url: %s\n"
                     "\tsample_rate: %d\n"
-                    "\tctx: %p %s\n"
+                    "\tctx: %s\n"
                     "\tlast_event_id: %s\n"
                     "\tmtx: %p\n",
             client, client->pubkey, client->seckey,
             client->store_url, client->sample_rate,
-            client->ctx, ctx, uu, &client->mtx);
+            ctx, uu, &client->mtx);
 
     free(ctx);
 }
@@ -419,7 +419,7 @@ static void msg_set_level_attr0(cJSON *json, uint32_t i)
 {
     assert_nonnull(json);
     if (i < ARRAY_SIZE(sentry_levels)) {
-        (void) cJSON_AddStringToObject(json, "level", sentry_levels[i]);
+        (void) cjson_add_or_update_str_to_obj(json, "level", sentry_levels[i]);
     }
 }
 
@@ -462,7 +462,7 @@ void csentry_capture_message(
 
     msg_set_level_attr(client, options);
 
-    (void) cJSON_AddStringToObject(client->ctx, "message", msg);
+    (void) cjson_add_or_update_str_to_obj(client->ctx, "message", msg);
     uuid_generate(u);
     uuid_unparse_lower(u, uuid);
     /*
@@ -471,26 +471,31 @@ void csentry_capture_message(
      *
      * XXX: as tested, uuid string with dashes is acceptable for Sentry server
      */
-    (void) cJSON_AddStringToObject(client->ctx, "event_id", uuid);
+    (void) cjson_add_or_update_str_to_obj(client->ctx, "event_id", uuid);
 
     format_iso_8601_time(ts);
-    (void) cJSON_AddStringToObject(client->ctx, "timestamp", ts);
+    (void) cjson_add_or_update_str_to_obj(client->ctx, "timestamp", ts);
 
-    (void) cJSON_AddStringToObject(client->ctx, "logger", "(builtin)");
-    (void) cJSON_AddStringToObject(client->ctx, "platform", "c");
+    (void) cjson_set_default_str_to_obj(client->ctx, "logger", "(builtin)");
+    (void) cjson_set_default_str_to_obj(client->ctx, "platform", "c");
 
-    sdk = cJSON_CreateObject();
-    if (sdk != NULL) {
-        (void) cJSON_AddStringToObject(sdk, "name", CSENTRY_NAME);
-        (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
-        //cJSON_AddItemReferenceToObject(client->ctx, "sdk", sdk);
-        cJSON_AddItemToObject(client->ctx, "sdk", sdk);
+    sdk = cJSON_GetObjectItem(client->ctx, "sdk");
+    if (sdk == NULL) {
+        sdk = cJSON_CreateObject();
+        if (sdk != NULL) {
+            (void) cJSON_AddStringToObject(sdk, "name", CSENTRY_NAME);
+            (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
+            cJSON_AddItemToObject(client->ctx, "sdk", sdk);
+        }
+    } else {
+        (void) cjson_set_default_str_to_obj(sdk, "name", CSENTRY_NAME);
+        (void) cjson_set_default_str_to_obj(sdk, "version", CSENTRY_VERSION);
     }
 
     if (cJSON_IsObject(attrs)) {
         json = cJSON_GetObjectItem(attrs, "logger");
         if (cJSON_IsString(json)) {
-            (void) cJSON_AddStringToObject(client->ctx, "logger", cJSON_GetStringValue(json));
+            (void) cjson_add_or_update_str_to_obj(client->ctx, "logger", cJSON_GetStringValue(json));
         }
 
         json = cJSON_GetObjectItem(attrs, "context");

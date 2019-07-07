@@ -59,5 +59,13 @@ void pmtx_unlock(pthread_mutex_t *mtx);
 int cjson_add_or_update_object(cJSON *, const char *, cJSON * _nullable);
 int cjson_add_object(cJSON *, const char *, cJSON * _nullable);
 
+cJSON * _nullable cjson_add_or_update_str_to_obj(
+    cJSON *, const char *, const char *
+);
+
+cJSON * _nullable cjson_set_default_str_to_obj(
+    cJSON *, const char *, const char *
+);
+
 #endif /* CSENTRY_UTILS_H */
 

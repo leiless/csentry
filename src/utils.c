@@ -131,3 +131,47 @@ int cjson_add_object(cJSON *json, const char *name, cJSON * _nullable item)
     return 0;
 }
 
+cJSON * _nullable cjson_add_or_update_str_to_obj(
+        cJSON *obj,
+        const char *name,
+        const char *str)
+{
+    cJSON *item;
+
+    assert_nonnull(obj);
+    assert_nonnull(name);
+    assert_nonnull(str);
+
+    if (cJSON_GetObjectItem(obj, name) != NULL) {
+        item = cJSON_CreateString(str);
+        (void) cJSON_ReplaceItemInObject(obj, name, item);
+        return item;
+    }
+
+    return cJSON_AddStringToObject(obj, name, str);
+}
+
+cJSON * _nullable cjson_set_default_str_to_obj(
+        cJSON *obj,
+        const char *name,
+        const char *str)
+{
+    cJSON *item;
+
+    assert_nonnull(obj);
+    assert_nonnull(name);
+    assert_nonnull(str);
+
+    item = cJSON_GetObjectItem(obj, name);
+    if (item != NULL) {
+        if (cJSON_IsString(item)) return item;
+
+        /* Try to correct with string value */
+        item = cJSON_CreateString(str);
+        (void) cJSON_ReplaceItemInObject(obj, name, item);
+        return item;
+    }
+
+    return cJSON_AddStringToObject(obj, name, str);
+}
+
