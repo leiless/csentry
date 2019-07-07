@@ -66,8 +66,11 @@ static void breadcrumb_test(void)
     handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.9, 0);
     assert_nonnull(handle);
 
-    csentry_add_breadcrumb(handle, "it's a breadcrumb", NULL, 0);
-    csentry_capture_message(handle, NULL, 0, "hello world...");
+    csentry_add_breadcrumb(handle, NULL, 0, "Event #1");
+    csentry_add_breadcrumb(handle, NULL, CSENTRY_LEVEL_WARN, "Event #2");
+    csentry_capture_message(handle, NULL, 0, "Cannot get some info...");
+
+    csentry_capture_message(handle, NULL, CSENTRY_LEVEL_INFO, "A plain info msg");
 
     csentry_debug(handle);
 

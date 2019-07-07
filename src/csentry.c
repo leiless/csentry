@@ -410,18 +410,25 @@ static void post_data(csentry_t *client)
 
 static const char *sentry_levels[] = {
     /* Default level is error */
-    "debug", "info", "warning", "fatal",
+    "error", "debug", "info", "warning", "fatal",
 };
 
 #define OPTIONS_TO_LEVEL(opt)   ((opt) >> 29)
 
-static void message_set_level_attr(csentry_t *client, uint32_t options)
+static void msg_set_level_attr0(cJSON *json, uint32_t i)
+{
+    assert_nonnull(json);
+    if (i < ARRAY_SIZE(sentry_levels)) {
+        (void) cJSON_AddStringToObject(json, "level", sentry_levels[i]);
+    }
+}
+
+static void msg_set_level_attr(csentry_t *client, uint32_t options)
 {
     uint32_t i = OPTIONS_TO_LEVEL(options);
+    assert_nonnull(client);
     /* Default level is error, we'll skip it since it's optinal */
-    if (i > 0 && i <= ARRAY_SIZE(sentry_levels)) {
-        (void) cJSON_AddStringToObject(client->ctx, "level", sentry_levels[i-1]);
-    }
+    if (i != 0) msg_set_level_attr0(client->ctx, i);
 }
 
 /**
@@ -453,7 +460,7 @@ void csentry_capture_message(
 
     pmtx_lock(&client->mtx);
 
-    message_set_level_attr(client, options);
+    msg_set_level_attr(client, options);
 
     (void) cJSON_AddStringToObject(client->ctx, "message", msg);
     uuid_generate(u);
@@ -476,7 +483,8 @@ void csentry_capture_message(
     if (sdk != NULL) {
         (void) cJSON_AddStringToObject(sdk, "name", CSENTRY_NAME);
         (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
-        cJSON_AddItemReferenceToObject(client->ctx, "sdk", sdk);
+        //cJSON_AddItemReferenceToObject(client->ctx, "sdk", sdk);
+        cJSON_AddItemToObject(client->ctx, "sdk", sdk);
     }
 
     if (cJSON_IsObject(attrs)) {
@@ -494,8 +502,37 @@ void csentry_capture_message(
     free(str);
 
     post_data(client);
+    cJSON_DeleteItemFromObject(client->ctx, "breadcrumbs");
 
     pmtx_unlock(&client->mtx);
+}
+
+static void breadcrumb_set_level_attr(cJSON *breadcrumb, uint32_t options)
+{
+    uint32_t i = OPTIONS_TO_LEVEL(options);
+    assert_nonnull(breadcrumb);
+
+    /* Switch position of error and info */
+    if (i == 0 || i == 2) i ^= 2;
+
+    /* Default breadcrumb level is info */
+    if (i != 2) msg_set_level_attr0(breadcrumb, i);
+}
+
+static const char *breadcrumb_types[] = {
+    /* Default breadcrumb type is "default" */
+    "default", "http", "error",
+};
+
+#define OPTIONS_TO_TYPE(opt)    (((opt) >> 27) & 0x3)
+
+static void breadcrumb_set_type_attr(cJSON *breadcrumb, uint32_t options)
+{
+    uint32_t i = OPTIONS_TO_TYPE(options);
+    assert_nonnull(breadcrumb);
+    if (i > 0 && i < ARRAY_SIZE(breadcrumb_types)) {
+        (void) cJSON_AddStringToObject(breadcrumb, "type", breadcrumb_types[i]);
+    }
 }
 
 /**
@@ -503,9 +540,9 @@ void csentry_capture_message(
  */
 void csentry_add_breadcrumb(
         void *client0,
-        const char *msg,
         const cJSON * _nullable attrs,
-        uint32_t options)
+        uint32_t options,
+        const char *msg)
 {
     csentry_t *client = (csentry_t *) client0;
     cJSON *breadcrumb;
@@ -531,10 +568,9 @@ void csentry_add_breadcrumb(
     (void) cJSON_AddStringToObject(breadcrumb, "timestamp", ts);
 
     (void) cJSON_AddStringToObject(breadcrumb, "category", "(builtin)");
-    (void) cJSON_AddStringToObject(breadcrumb, "level", "info");
-    (void) cJSON_AddStringToObject(breadcrumb, "type", "default");
 
-    UNUSED(options);
+    breadcrumb_set_level_attr(breadcrumb, options);
+    breadcrumb_set_type_attr(breadcrumb, options);
 
     if (cJSON_IsObject(attrs)) {
         json = cJSON_GetObjectItem(attrs, "category");
@@ -545,23 +581,7 @@ void csentry_add_breadcrumb(
             }
         }
 
-        /* TODO: merge level and type into `options' */
-
-        json = cJSON_GetObjectItem(attrs, "level");
-        if (cJSON_IsString(json)) {
-            cp = cJSON_Duplicate(json, 1);
-            if (!cjson_add_or_update(breadcrumb, "level", cp)) {
-                cJSON_Delete(cp);
-            }
-        }
-
-        json = cJSON_GetObjectItem(attrs, "type");
-        if (cJSON_IsString(json)) {
-            cp = cJSON_Duplicate(json, 1);
-            if (!cjson_add_or_update(breadcrumb, "type", cp)) {
-                cJSON_Delete(cp);
-            }
-        }
+        /* Level and type in context will be ignored */
 
         json = cJSON_GetObjectItem(attrs, "data");
         if (json != NULL) {
