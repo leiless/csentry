@@ -59,6 +59,45 @@ static void baseline_test(void)
     csentry_destroy(handle);
 }
 
+/*
+ * see: https://jsonformatter.curiousconcept.com/
+ */
+static void baseline_test_v2(void)
+{
+    void *handle;
+    cJSON *attrs;
+
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.5, 0);
+    assert_nonnull(handle);
+
+    attrs = cJSON_Parse("{\"logger\":\"custom_logger\"}");
+    assert_nonnull(attrs);
+    csentry_capture_message(handle, attrs, 0, "Test message #1");
+    cJSON_Delete(attrs);
+
+    attrs = cJSON_Parse("{\"logger\":\"_logger\",\"context\":{\"user\":{\"name\":\"lynnl\",\"uid\":1000}}}");
+    assert_nonnull(attrs);
+    csentry_capture_message(handle, attrs, 0, "Test message #2");
+    cJSON_Delete(attrs);
+
+    attrs = cJSON_Parse("{\"logger\":\"luke\",\"context\":{\"user\":{\"gid\":50,\"home\":\"/home/lynnl\",\"env\":[\"USER\",\"PATH\",\"LANG\",\"SHELL\",\"PWD\"]}}}");
+    assert_nonnull(attrs);
+    csentry_capture_message(handle, attrs, 0, "Test message #3");
+    cJSON_Delete(attrs);
+
+    attrs = cJSON_Parse("{\"context\":{\"tags\":{\"os\":\"Linux\",\"locale\":\"en_US.UTF-8\",\"hostname\":\"lynnl-hub\",\"early_access\":true,\"hit_counter\":5931}}}");
+    assert_nonnull(attrs);
+    csentry_capture_message(handle, attrs, 0, "Test message #4");
+    cJSON_Delete(attrs);
+
+    attrs = cJSON_Parse("{\"context\":{\"extra\":{\"network\":\"wifi\",\"ping\":38,\"paid_user\":true}}}");
+    assert_nonnull(attrs);
+    csentry_capture_message(handle, attrs, 0, "Test message #5");
+    cJSON_Delete(attrs);
+
+    csentry_destroy(handle);
+}
+
 static void breadcrumb_test(void)
 {
     void *handle;
@@ -68,6 +107,7 @@ static void breadcrumb_test(void)
 
     csentry_add_breadcrumb(handle, NULL, 0, "Event #1");
     csentry_add_breadcrumb(handle, NULL, CSENTRY_LEVEL_WARN, "Event #2");
+    csentry_add_breadcrumb(handle, NULL, CSENTRY_LEVEL_DEBUG | CSENTRY_BC_TYPE_HTTP, "Event #3");
     csentry_capture_message(handle, NULL, 0, "Cannot get some info...");
 
     csentry_capture_message(handle, NULL, CSENTRY_LEVEL_INFO, "A plain info msg");
@@ -81,9 +121,11 @@ int main(void)
 {
     LOG_DBG("Debug build");
 
+    UNUSED(baseline_test, breadcrumb_test);
     //baseline_test();
-    UNUSED(baseline_test);
-    breadcrumb_test();
+    //breadcrumb_test();
+
+    baseline_test_v2();
 
     LOG("Pass!");
     return 0;

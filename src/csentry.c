@@ -680,7 +680,7 @@ static int csentry_ctx_update0(
 
     if (data == NULL) goto out_exit;
 
-    pmtx_lock(&client->mtx);
+    /* client->mtx already locked */
 
     name_json = cJSON_GetObjectItem(client->ctx, name);
     if (name_json != NULL) {
@@ -704,8 +704,6 @@ static int csentry_ctx_update0(
             cJSON_Delete(copy);
         }
     }
-
-    pmtx_unlock(&client->mtx);
 
 out_exit:
     return dirty;
