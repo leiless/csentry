@@ -98,6 +98,74 @@ static void baseline_test_v2(void)
     csentry_destroy(handle);
 }
 
+static void ctx_test_v1(void)
+{
+    void *handle;
+    cJSON *attrs;
+
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.5, 0);
+    assert_nonnull(handle);
+
+    attrs = cJSON_Parse("{\"shell\":\"bash\",\"flags\":2081,\"any_error\":true,\"array\":[1,\"foobar\",true]}");
+    assert_nonnull(attrs);
+    csentry_ctx_update_user(handle, attrs);
+    csentry_capture_message(handle, NULL, 0, "Context test v1, message #1");
+    cJSON_Delete(attrs);
+
+    csentry_destroy(handle);
+}
+
+static void ctx_test_v2(void)
+{
+    void *handle;
+    cJSON *attrs;
+
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.8, 0);
+    assert_nonnull(handle);
+
+    attrs = cJSON_Parse("{\"logger\":\"bird\",\"country_code\":86,\"locale_dst\":false}");
+    assert_nonnull(attrs);
+    csentry_ctx_update_tags(handle, attrs);
+    csentry_capture_message(handle, NULL, 0, "Context test v2, message #1");
+    cJSON_Delete(attrs);
+
+    csentry_destroy(handle);
+}
+
+static void ctx_test_v3(void)
+{
+    void *handle;
+    cJSON *attrs;
+
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.8, 0);
+    assert_nonnull(handle);
+
+    attrs = cJSON_Parse("{\"commit\":\"1c1edeb4ec4ac20f8f25e38af5cbc87ab4d29d8a\",\"version\":20190711,\"stable\":true}");
+    assert_nonnull(attrs);
+    csentry_ctx_update_extra(handle, attrs);
+    csentry_capture_message(handle, NULL, 0, "Context test v3, message #1");
+    cJSON_Delete(attrs);
+
+    csentry_destroy(handle);
+}
+
+static void ctx_test_v4(void)
+{
+    void *handle;
+    cJSON *attrs;
+
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.8, 0);
+    assert_nonnull(handle);
+
+    attrs = cJSON_Parse("{\"user\":{\"name\":\"lynnl\"},\"tags\":{\"root\":false},\"extra\":{\"uptime_secs\":3041},\"unrecognized\":{\"foo\":\"bar\"}}");
+    assert_nonnull(attrs);
+    csentry_ctx_update(handle, attrs);
+    csentry_capture_message(handle, NULL, 0, "Context test v4, message #1");
+    cJSON_Delete(attrs);
+
+    csentry_destroy(handle);
+}
+
 static void breadcrumb_test(void)
 {
     void *handle;
@@ -125,7 +193,19 @@ int main(void)
     //baseline_test();
     //breadcrumb_test();
 
-    baseline_test_v2();
+    //baseline_test_v2();
+    UNUSED(baseline_test_v2);
+
+    //ctx_test_v1();
+    UNUSED(ctx_test_v1);
+
+    //ctx_test_v2();
+    UNUSED(ctx_test_v2);
+
+    //ctx_test_v3();
+    UNUSED(ctx_test_v3);
+
+    ctx_test_v4();
 
     LOG("Pass!");
     return 0;

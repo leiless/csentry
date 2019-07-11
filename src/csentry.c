@@ -509,6 +509,8 @@ void csentry_capture_message(
     post_data(client);
     cJSON_DeleteItemFromObject(client->ctx, "breadcrumbs");
 
+    /* TODO: remove temporary attributes in `attr' */
+
     pmtx_unlock(&client->mtx);
 }
 
