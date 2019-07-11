@@ -8,6 +8,7 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
+#include <stdarg.h>
 
 #include <uuid/uuid.h>
 
@@ -446,7 +447,8 @@ void csentry_capture_message(
         void *client0,
         const cJSON * _nullable attrs,
         uint32_t options,
-        const char *msg)
+        const char *format,
+        ...)
 {
     csentry_t *client = (csentry_t *) client0;
     uuid_t u;
@@ -454,9 +456,39 @@ void csentry_capture_message(
     char ts[ISO_8601_BUFSZ];
     cJSON *sdk;
     cJSON *json;
+    va_list ap;
+    int sz;
+    int sz2;
+    char *msg;
 
     assert_nonnull(client);
-    assert_nonnull(msg);
+    assert_nonnull(format);
+
+out_toctou:
+    va_start(ap, format);
+    sz = vsnprintf(NULL, 0, format, ap);
+    va_end(ap);
+
+    if (sz > 0) {
+        msg = (char *) malloc(sz + 1);
+        if (msg != NULL) {
+            va_start(ap, format);
+            sz2 = vsnprintf(msg, sz + 1, format, ap);
+            va_end(ap);
+
+            if (sz2 > sz) {
+                free(msg);
+                goto out_toctou;
+            } else if (sz2 < 0) {
+                free(msg);
+                msg = (char *) format;
+            }
+        } else {
+            msg = (char *) format;
+        }
+    } else {
+        msg = (char *) format;
+    }
 
     pmtx_lock(&client->mtx);
 
@@ -512,6 +544,8 @@ void csentry_capture_message(
     /* TODO: remove temporary attributes in `attr' */
 
     pmtx_unlock(&client->mtx);
+
+    if (msg != format) free(msg);
 }
 
 static void breadcrumb_set_level_attr(cJSON *breadcrumb, uint32_t options)

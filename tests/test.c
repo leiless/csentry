@@ -98,6 +98,21 @@ static void baseline_test_v2(void)
     csentry_destroy(handle);
 }
 
+static void baseline_test_v3(void)
+{
+    void *handle;
+
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.8, 0);
+    assert_nonnull(handle);
+
+    csentry_capture_message(handle, NULL, 0, "A plain message\n\tWith multiple lines!\n");
+
+    csentry_capture_message(handle, NULL, 0, "msg: %s value: %g entropy: %p",
+            "hi!", 3.141592654, handle);
+
+    csentry_destroy(handle);
+}
+
 static void ctx_test_v1(void)
 {
     void *handle;
@@ -219,6 +234,8 @@ int main(void)
     //baseline_test_v2();
     UNUSED(baseline_test_v2);
 
+    baseline_test_v3();
+
     //ctx_test_v1();
     UNUSED(ctx_test_v1);
 
@@ -228,7 +245,8 @@ int main(void)
     //ctx_test_v3();
     UNUSED(ctx_test_v3);
 
-    ctx_test_v4();
+    //ctx_test_v4();
+    UNUSED(ctx_test_v4);
 
     LOG("Pass!");
     return 0;
