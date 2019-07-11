@@ -664,6 +664,7 @@ void csentry_get_last_event_id_string(void *client0, uuid_string_t out)
 }
 
 /**
+ * @param data  if data is NULL, corresponding `name' in context will be deleted
  * @return      1 if Sentry context has been modified
  */
 static int csentry_ctx_update0(
@@ -680,12 +681,16 @@ static int csentry_ctx_update0(
     assert_nonnull(client);
     assert_nonnull(name);
 
-    if (data == NULL) goto out_exit;
-
     /* client->mtx already locked */
 
     name_json = cJSON_GetObjectItem(client->ctx, name);
     if (name_json != NULL) {
+        if (data == NULL) {
+            cJSON_DeleteItemFromObject(client->ctx, name);
+            dirty = cJSON_GetObjectItem(client->ctx, name) == NULL;
+        }
+
+        /* if `data' is NULL, below cJSON_ArrayForEach() do nop */
         cJSON_ArrayForEach(iter, data) {
             if (iter->string == NULL) continue;
 
@@ -707,7 +712,6 @@ static int csentry_ctx_update0(
         }
     }
 
-out_exit:
     return dirty;
 }
 
@@ -739,7 +743,12 @@ int csentry_ctx_update(void *client0, const cJSON * _nullable ctx)
     cJSON *iter;
 
     assert_nonnull(client);
-    if (ctx == NULL) goto out_exit;
+    if (ctx == NULL) {
+        (void) csentry_ctx_update_user(client0, NULL);
+        (void) csentry_ctx_update_tags(client0, NULL);
+        (void) csentry_ctx_update_extra(client0, NULL);
+        goto out_exit;
+    }
 
     if (!cJSON_IsObject(ctx)) {
         e = -1;
@@ -756,15 +765,8 @@ int csentry_ctx_update(void *client0, const cJSON * _nullable ctx)
             (void) csentry_ctx_update0(client, iter->string, iter);
 
             printf("Merging %s into cSentry context\n", iter->string);
-        } else if (!strcmp(iter->string, "level")) {
-            /* Level is ignored, it make sense only for posting message */
-            continue;
         } else {
-#if 0
-            e = -1;
-            errno = ENOTSUP;
-            break;
-#endif
+            /* Unknown context names will be simply ignored */
         }
     }
 

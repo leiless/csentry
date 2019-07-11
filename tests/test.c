@@ -153,6 +153,8 @@ static void ctx_test_v4(void)
 {
     void *handle;
     cJSON *attrs;
+    int dirty;
+    int e;
 
     handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.8, 0);
     assert_nonnull(handle);
@@ -160,7 +162,28 @@ static void ctx_test_v4(void)
     attrs = cJSON_Parse("{\"user\":{\"name\":\"lynnl\"},\"tags\":{\"root\":false},\"extra\":{\"uptime_secs\":3041},\"unrecognized\":{\"foo\":\"bar\"}}");
     assert_nonnull(attrs);
     csentry_ctx_update(handle, attrs);
-    csentry_capture_message(handle, NULL, 0, "Context test v4, message #1");
+    csentry_capture_message(handle, NULL, 0, "Context test v4, message #1 with all three ctx");
+    cJSON_Delete(attrs);
+
+    dirty = csentry_ctx_update_user(handle, NULL);
+    assert(dirty == 1);
+    csentry_capture_message(handle, NULL, 0, "Context test v4, message #2 without user ctx");
+
+    dirty = csentry_ctx_update_tags(handle, NULL);
+    assert(dirty == 1);
+    csentry_capture_message(handle, NULL, 0, "Context test v4, message #3 without user/tags ctx");
+
+    dirty = csentry_ctx_update_extra(handle, NULL);
+    assert(dirty == 1);
+    csentry_capture_message(handle, NULL, 0, "Context test v4, message #4 without user/tags/extra ctx");
+
+    attrs = cJSON_Parse("{\"user\":{\"home\":\"/root/home\"},\"tags\":{\"root\":true},\"extra\":{\"uid\":1000}}");
+    assert_nonnull(attrs);
+    e = csentry_ctx_update(handle, attrs);
+    assert(e == 0);
+    e = csentry_ctx_update(handle, NULL);
+    assert(e == 0);
+    csentry_capture_message(handle, NULL, 0, "Context test v4, message #5");
     cJSON_Delete(attrs);
 
     csentry_destroy(handle);
