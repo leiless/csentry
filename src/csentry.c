@@ -283,12 +283,7 @@ void csentry_destroy(void *arg)
         free((void *) client->pubkey);
         free((void *) client->seckey);
         free((void *) client->store_url);
-
-        /* TODO: seems no need to protect ctx-freeing */
-        //pmtx_lock(&client->mtx);
         cJSON_Delete(client->ctx);
-        //pmtx_unlock(&client->mtx);
-
         free(client);
     }
 }
@@ -362,8 +357,8 @@ static void post_data(csentry_t *client)
     int n;
     assert_nonnull(client);
 
-    /* TODO: ignore sentry_secret since it's obsoleted */
     if (client->seckey) {
+        /* NOTE: sentry_secret is obsoleted */
         n = snprintf(xauth, X_AUTH_HEADER_SIZE,
                      "X-Sentry-Auth: "
                      "Sentry sentry_version=%d, "
