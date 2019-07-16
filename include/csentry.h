@@ -41,7 +41,7 @@ void csentry_debug(void *);
  * TODO: support format message
  */
 void csentry_capture_message(void *, const cJSON * _nullable, uint32_t, const char *, ...);
-void csentry_add_breadcrumb(void *, const cJSON * _nullable, uint32_t, const char *);
+void csentry_add_breadcrumb(void *, const cJSON * _nullable, uint32_t, const char *, ...);
 
 void csentry_get_last_event_id(void *, uuid_t);
 void csentry_get_last_event_id_string(void *, uuid_string_t);

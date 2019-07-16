@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "../include/csentry.h"
 #include "../src/utils.h"
@@ -223,6 +224,25 @@ static void breadcrumb_test(void)
     csentry_destroy(handle);
 }
 
+static void breadcrumb_test_v2(void)
+{
+    static char *p = NULL;
+    void *handle;
+
+    srandom(time(NULL) ^ getpid());
+
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.9, 0);
+    assert_nonnull(handle);
+
+    csentry_add_breadcrumb(handle, NULL, CSENTRY_LEVEL_WARN, "Breadcrumb msg, handle: %p rand: %#lx", handle, random());
+
+    csentry_capture_message(handle, NULL, CSENTRY_LEVEL_INFO, "Msg: %s entropy: %p rand: %#lx", "hello", &p, random());
+
+    csentry_debug(handle);
+
+    csentry_destroy(handle);
+}
+
 int main(void)
 {
     LOG_DBG("Debug build");
@@ -234,7 +254,8 @@ int main(void)
     //baseline_test_v2();
     UNUSED(baseline_test_v2);
 
-    baseline_test_v3();
+    UNUSED(baseline_test_v3);
+    //baseline_test_v3();
 
     //ctx_test_v1();
     UNUSED(ctx_test_v1);
@@ -247,6 +268,8 @@ int main(void)
 
     //ctx_test_v4();
     UNUSED(ctx_test_v4);
+
+    breadcrumb_test_v2();
 
     LOG("Pass!");
     return 0;

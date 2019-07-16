@@ -583,7 +583,8 @@ void csentry_add_breadcrumb(
         void *client0,
         const cJSON * _nullable attrs,
         uint32_t options,
-        const char *msg)
+        const char *format,
+        ...)
 {
     csentry_t *client = (csentry_t *) client0;
     cJSON *breadcrumb;
@@ -593,12 +594,43 @@ void csentry_add_breadcrumb(
     cJSON *cp;
     cJSON *values;
     cJSON *arr;
+    va_list ap;
+    int sz;
+    int sz2;
+    char *msg;
 
     assert_nonnull(client);
-    assert_nonnull(msg);
+    assert_nonnull(format);
 
     breadcrumb = cJSON_CreateObject();
-    if (breadcrumb == NULL) return;     /* TODO */
+    /* TODO: graceful failures for ENOMEM? */
+    if (breadcrumb == NULL) return;
+
+out_toctou:
+    va_start(ap, format);
+    sz = vsnprintf(NULL, 0, format, ap);
+    va_end(ap);
+
+    if (sz > 0) {
+        msg = (char *) malloc(sz + 1);
+        if (msg != NULL) {
+            va_start(ap, format);
+            sz2 = vsnprintf(msg, sz + 1, format, ap);
+            va_end(ap);
+
+            if (sz2 > sz) {
+                free(msg);
+                goto out_toctou;
+            } else if (sz2 < 0) {
+                free(msg);
+                msg = (char *) format;
+            }
+        } else {
+            msg = (char *) format;
+        }
+    } else {
+        msg = (char *) format;
+    }
 
     uuid_string_random(uuid);
 
@@ -675,6 +707,8 @@ out_add_values:
 
 out_unlock:
     pmtx_unlock(&client->mtx);
+
+    if (msg != format) free(msg);
 }
 
 void csentry_get_last_event_id(void *client0, uuid_t uuid)
