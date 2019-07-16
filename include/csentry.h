@@ -37,16 +37,13 @@ void * _nullable csentry_new(const char *, const cJSON * _nullable, float, int);
 void csentry_destroy(void *);
 void csentry_debug(void *);
 
-/**
- * TODO: support format message
- */
 void csentry_capture_message(void *, const cJSON * _nullable, uint32_t, const char *, ...);
 void csentry_add_breadcrumb(void *, const cJSON * _nullable, uint32_t, const char *, ...);
 
 void csentry_get_last_event_id(void *, uuid_t);
 void csentry_get_last_event_id_string(void *, uuid_string_t);
 
-const cJSON *csentry_ctx_get(void *);
+char * _nullable csentry_ctx_get(void *);
 int csentry_ctx_update_user(void *, const cJSON * _nullable);
 int csentry_ctx_update_tags(void *, const cJSON * _nullable);
 int csentry_ctx_update_extra(void *, const cJSON * _nullable);

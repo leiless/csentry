@@ -857,15 +857,22 @@ int csentry_ctx_update_extra(void *client0, const cJSON * _nullable data)
     return csentry_ctx_update0(client0, "extra", data);
 }
 
-/*
- * XXX: access context in multithreading environment is dangerous
+/**
+ * @return      cSentry context json string
+ *              You're responsible to free(3) it if it's non-NULL
  */
-const cJSON *csentry_ctx_get(void *client0)
+char * _nullable csentry_ctx_get(void *client0)
 {
     csentry_t *client = (csentry_t *) client0;
+    char *p;
+
     assert_nonnull(client);
-    /* TODO: remove message, event_id, logger, platform, timestamp, sdk attrs */
-    return client->ctx;
+
+    pmtx_lock(&client->mtx);
+    p = cJSON_Print(client->ctx);
+    pmtx_unlock(&client->mtx);
+
+    return p;
 }
 
 void csentry_ctx_clear(void *client0)

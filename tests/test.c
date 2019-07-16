@@ -25,7 +25,6 @@ static void baseline_test(void)
     uuid_t u;
     uuid_string_t uu1;
     uuid_string_t uu2;
-    const cJSON *ctx;
     char *ctx_str;
 
     handle = csentry_new("", NULL, 1.0, 0);
@@ -51,10 +50,8 @@ static void baseline_test(void)
     LOG("Last event id: %s", uu1);
     csentry_debug(handle);
 
-    ctx = csentry_ctx_get(handle);
-    assert_nonnull(ctx);
-    ctx_str = cJSON_Print(ctx);
-    LOG("ctx: %p %s", ctx, ctx_str);
+    ctx_str = csentry_ctx_get(handle);
+    LOG("ctx: %s", ctx_str);
     free(ctx_str);
 
     csentry_destroy(handle);
@@ -248,7 +245,7 @@ int main(void)
     LOG_DBG("Debug build");
 
     UNUSED(baseline_test, breadcrumb_test);
-    //baseline_test();
+    baseline_test();
     //breadcrumb_test();
 
     //baseline_test_v2();
@@ -269,7 +266,8 @@ int main(void)
     //ctx_test_v4();
     UNUSED(ctx_test_v4);
 
-    breadcrumb_test_v2();
+    UNUSED(breadcrumb_test_v2);
+    //breadcrumb_test_v2();
 
     LOG("Pass!");
     return 0;
