@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <time.h>
 #include <stdarg.h>
+#include <pwd.h>
+#include <unistd.h>
 
 #include <uuid/uuid.h>
 
@@ -873,12 +875,47 @@ char * _nullable csentry_ctx_get(void *client0)
 void csentry_ctx_clear(void *client0)
 {
     csentry_t *client = (csentry_t *) client0;
+    cJSON *user_json;
+    struct passwd *pwd;
+    const char *env;
+
     assert_nonnull(client);
 
     pmtx_lock(&client->mtx);
     cJSON_Delete(client->ctx);
     client->ctx = cJSON_CreateObject();
     assert_nonnull(client->ctx);
+
+    user_json = cJSON_AddObjectToObject(client->ctx, "user");
+    if (user_json) {
+        pwd = getpwuid(getuid());
+        if (pwd != NULL) {
+            (void) cJSON_AddStringToObject(user_json, "name", pwd->pw_name);
+            (void) cJSON_AddNumberToObject(user_json, "uid", pwd->pw_uid);
+            (void) cJSON_AddNumberToObject(user_json, "gid", pwd->pw_gid);
+            (void) cJSON_AddStringToObject(user_json, "home", pwd->pw_dir);
+            (void) cJSON_AddStringToObject(user_json, "shell", pwd->pw_shell);
+        } else {
+            env = getenv("USER");
+            if (env) {
+                (void) cJSON_AddStringToObject(user_json, "name", env);
+            }
+
+            (void) cJSON_AddNumberToObject(user_json, "uid", getuid());
+            (void) cJSON_AddNumberToObject(user_json, "gid", getgid());
+
+            env = getenv("HOME");
+            if (env) {
+                (void) cJSON_AddStringToObject(user_json, "home", env);
+            }
+
+            env = getenv("SHELL");
+            if (env) {
+                (void) cJSON_AddStringToObject(user_json, "shell", env);
+            }
+        }
+    }
+
     pmtx_unlock(&client->mtx);
 }
 
