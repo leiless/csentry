@@ -451,7 +451,6 @@ void csentry_capture_message(
     uuid_t u;
     uuid_string_t uuid;
     char ts[ISO_8601_BUFSZ];
-    cJSON *sdk;
     cJSON *json;
     va_list ap;
     int sz;
@@ -506,20 +505,6 @@ out_toctou:
     (void) cjson_add_or_update_str_to_obj(client->ctx, "timestamp", ts);
 
     (void) cjson_set_default_str_to_obj(client->ctx, "logger", "(builtin)");
-    (void) cjson_set_default_str_to_obj(client->ctx, "platform", "c");
-
-    sdk = cJSON_GetObjectItem(client->ctx, "sdk");
-    if (sdk == NULL) {
-        sdk = cJSON_CreateObject();
-        if (sdk != NULL) {
-            (void) cJSON_AddStringToObject(sdk, "name", CSENTRY_NAME);
-            (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
-            cJSON_AddItemToObject(client->ctx, "sdk", sdk);
-        }
-    } else {
-        (void) cjson_set_default_str_to_obj(sdk, "name", CSENTRY_NAME);
-        (void) cjson_set_default_str_to_obj(sdk, "version", CSENTRY_VERSION);
-    }
 
     if (cJSON_IsObject(attrs)) {
         json = cJSON_GetObjectItem(attrs, "logger");
@@ -878,6 +863,7 @@ void csentry_ctx_clear(void *client0)
     cJSON *user_json;
     struct passwd *pwd;
     const char *env;
+    cJSON *sdk;
 
     assert_nonnull(client);
 
@@ -913,6 +899,15 @@ void csentry_ctx_clear(void *client0)
             if (env) {
                 (void) cJSON_AddStringToObject(user_json, "shell", env);
             }
+        }
+
+        (void) cJSON_AddStringToObject(client->ctx, "platform", "c");
+
+        sdk = cJSON_CreateObject();
+        if (sdk != NULL) {
+            (void) cJSON_AddStringToObject(sdk, "name", CSENTRY_NAME);
+            (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
+            cJSON_AddItemToObject(client->ctx, "sdk", sdk);
         }
     }
 
