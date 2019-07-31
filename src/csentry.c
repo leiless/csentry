@@ -20,6 +20,7 @@
 #include "utils.h"
 #include "csentry.h"
 #include "curl_ez.h"
+#include "constants.h"
 
 typedef enum {
     HTTP_SCHEME = 0,
@@ -857,6 +858,64 @@ char * _nullable csentry_ctx_get(void *client0)
     return p;
 }
 
+/**
+ * TODO: retrieve system info on-the-fly
+ */
+static void populate_contexts(cJSON *ctx)
+{
+    cJSON *contexts;
+    cJSON *os;
+    cJSON *device;
+    cJSON *app;
+    char buffer[128];
+
+    assert_nonnull(ctx);
+    contexts = cJSON_AddObjectToObject(ctx, "contexts");
+    if (contexts == NULL) return;
+
+    os = cJSON_AddObjectToObject(contexts, "os");
+    if (os != NULL) {
+#ifdef __APPLE__
+        (void) cJSON_AddStringToObject(os, "name", "macOS");
+        (void) snprintf(buffer, sizeof(buffer), "%s (%s)", CONST_OS_RELEASE, CONST_OS_VERSION);
+        (void) cJSON_AddStringToObject(os, "version", buffer);
+#else
+        (void) cJSON_AddStringToObject(os, "name", CONST_CMAKE_SYSTEM_NAME);
+        (void) snprintf(buffer, sizeof(buffer), "%s %s (%s)",
+                CONST_CMAKE_SYSTEM_VERSION, CONST_OS_RELEASE, CONST_OS_VERSION);
+        (void) cJSON_AddStringToObject(os, "version", buffer);
+#endif
+
+#if defined(__unix__) || defined(__unix) || defined(BSD)
+        (void) cJSON_AddStringToObject(os, "kernel_version", CONST_UNAME);
+#endif
+    }
+
+    device = cJSON_AddObjectToObject(contexts, "device");
+    if (device != NULL) {
+#ifdef __APPLE__
+        (void) cJSON_AddStringToObject(device, "model", CONST_HW_MODEL);
+#else
+        /* If contexts.device.family absent  A default value "Unknown Device" will be used */
+#endif
+
+        (void) cJSON_AddStringToObject(device, "arch", CONST_CMAKE_SYSTEM_PROCESSOR);
+        (void) cJSON_AddNumberToObject(device, "memory_size", CONST_PHYS_MEM_TOTAL);
+        (void) cJSON_AddNumberToObject(device, "free_memory", CONST_PHYS_MEM_FREE);
+        (void) cJSON_AddNumberToObject(device, "core", CONST_PHYS_CORES);
+        (void) cJSON_AddNumberToObject(device, "socket", CONST_LOGI_CORES);
+    }
+
+    app = cJSON_AddObjectToObject(contexts, "app");
+    if (app != NULL) {
+        (void) cJSON_AddStringToObject(app, "build_type", CONST_CMAKE_BUILD_TYPE);
+        (void) cJSON_AddStringToObject(app, "c_flags", CONST_CMAKE_C_FLAGS);
+        (void) cJSON_AddStringToObject(app, "compile_definitions", CONST_COMPILE_DEFINITIONS);
+        (void) cJSON_AddNumberToObject(app, "pointer_bits", CONST_PTR_BITS);
+        (void) cJSON_AddNumberToObject(app, "pid", getpid());
+    }
+}
+
 void csentry_ctx_clear(void *client0)
 {
     csentry_t *client = (csentry_t *) client0;
@@ -900,6 +959,7 @@ void csentry_ctx_clear(void *client0)
                 (void) cJSON_AddStringToObject(user_json, "shell", env);
             }
         }
+        (void) cJSON_AddStringToObject(user_json, "hostname", CONST_HOSTNAME);
 
         (void) cJSON_AddStringToObject(client->ctx, "platform", "c");
 
@@ -909,6 +969,8 @@ void csentry_ctx_clear(void *client0)
             (void) cJSON_AddStringToObject(sdk, "version", CSENTRY_VERSION);
             cJSON_AddItemToObject(client->ctx, "sdk", sdk);
         }
+
+        populate_contexts(client->ctx);
     }
 
     pmtx_unlock(&client->mtx);
