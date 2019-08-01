@@ -12,6 +12,8 @@
 #include <pwd.h>
 #include <unistd.h>
 
+#include <pthread.h>
+
 #include <uuid/uuid.h>
 
 #include <curl/curl.h>
@@ -36,6 +38,12 @@ typedef struct {
     cJSON *ctx;
     uuid_t last_event_id;
     pthread_mutex_t mtx;    /* Protects ctx and last_event_id */
+
+    /* Used for POST data thread */
+    pthread_t thread;
+    volatile int keepalive;
+    pthread_mutex_t thread_mp;
+    pthread_cond_t thread_cv;
 } csentry_t;
 
 typedef struct {
@@ -221,10 +229,39 @@ out_exit:
 }
 
 /*
- * static pthread mutex initialization always success by nature
+ * static pthread mutex/condition initialization always success by nature
  * see: https://stackoverflow.com/questions/14320041/pthread-mutex-initializer-vs-pthread-mutex-init-mutex-param
  */
-static pthread_mutex_t builtin_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t __static_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t __static_cond = PTHREAD_COND_INITIALIZER;
+
+static void post_data(csentry_t *);
+
+static void *post_data_thread(void *arg)
+{
+    int e;
+    csentry_t *client = (csentry_t *) arg;
+
+    assert_nonnull(client);
+
+    /* pthread_detach(3) self should always success */
+    e = pthread_detach(pthread_self());
+    assert(e == 0);
+
+    /* TODO */
+    pmtx_lock(&client->thread_mp);
+    while (client->keepalive) {
+        /* TODO: pthread_cond_wait_safe() */
+        e = pthread_cond_wait(&client->thread_cv, &client->thread_mp);
+        assert(e == 0);
+
+        post_data(client);
+        cJSON_DeleteItemFromObject(client->ctx, "breadcrumbs");
+    }
+    pmtx_unlock(&client->thread_mp);
+
+    pthread_exit(NULL);
+}
 
 /**
  * DSN(Client key) format:
@@ -237,6 +274,7 @@ void * _nullable csentry_new(
         float sample_rate,
         int install_handlers)
 {
+    int e;
     csentry_t *client = NULL;
 
     assert_nonnull(dsn);
@@ -257,7 +295,7 @@ void * _nullable csentry_new(
         goto out_exit;
     }
 
-    client->mtx = builtin_mutex;
+    client->mtx = __static_mutex;
 
     csentry_ctx_clear(client);
     if (csentry_ctx_update(client, ctx) != 0) {
@@ -271,8 +309,20 @@ void * _nullable csentry_new(
     printf("> sample_rate: %d\n", client->sample_rate);
     printf("\n");
 
+    client->keepalive = 1;
+    e = pthread_create(&client->thread, NULL, post_data_thread, client);
+    if (e != 0) {
+        errno = e;
+        csentry_destroy(client);
+        client = NULL;
+        goto out_exit;
+    }
+
+    client->thread_mp = __static_mutex;
+    client->thread_cv = __static_cond;
+
     if (install_handlers) {
-        /* TODO: capture sginals */
+        /* TODO: capture signals */
     }
 
 out_exit:
@@ -283,11 +333,18 @@ void csentry_destroy(void *arg)
 {
     csentry_t *client = (csentry_t *) arg;
     if (client != NULL) {
+        pmtx_lock(&client->thread_mp);
+        client->keepalive = 0;
+        int e = pthread_cond_signal(&client->thread_cv);
+        assert(e == 0);
+        pmtx_unlock(&client->thread_mp);
+
         free((void *) client->pubkey);
         free((void *) client->seckey);
         free((void *) client->store_url);
         cJSON_Delete(client->ctx);
         free(client);
+        /* TODO: destroy mutex/cond/thread */
     }
 }
 
@@ -457,6 +514,7 @@ void csentry_capture_message(
     int sz;
     int sz2;
     char *msg;
+    int e;
 
     assert_nonnull(client);
     assert_nonnull(format);
@@ -521,8 +579,16 @@ out_toctou:
     printf("%s\n", str);
     free(str);
 
+#if 0
     post_data(client);
     cJSON_DeleteItemFromObject(client->ctx, "breadcrumbs");
+#endif
+
+    /* TODO: async post */
+    pmtx_lock(&client->thread_mp);
+    e = pthread_cond_signal(&client->thread_cv);
+    assert(e == 0);
+    pmtx_unlock(&client->thread_mp);
 
     /* TODO: remove temporary attributes in `attr' */
 
