@@ -81,8 +81,15 @@ void uuid_string_random(uuid_string_t str)
     uuid_unparse_lower(uu, str);
 }
 
+void pthread_detach_safe(pthread_t thd)
+{
+    int e;
+    assert_nonnull(thd);
+    e = pthread_detach(thd);
+    assert(e == 0);
+}
 
-void pmtx_lock(pthread_mutex_t *mtx)
+void pthread_mutex_lock_safe(pthread_mutex_t *mtx)
 {
     int e;
     assert_nonnull(mtx);
@@ -90,11 +97,44 @@ void pmtx_lock(pthread_mutex_t *mtx)
     assert(e == 0);
 }
 
-void pmtx_unlock(pthread_mutex_t *mtx)
+void pthread_mutex_unlock_safe(pthread_mutex_t *mtx)
 {
     int e;
     assert_nonnull(mtx);
     e = pthread_mutex_unlock(mtx);
+    assert(e == 0);
+}
+
+void pthread_mutex_destroy_safe(pthread_mutex_t *mtx)
+{
+    int e;
+    assert_nonnull(mtx);
+    e = pthread_mutex_destroy(mtx);
+    assert(e == 0);
+}
+
+void pthread_cond_wait_safe(pthread_cond_t *cond, pthread_mutex_t *mtx)
+{
+    int e;
+    assert_nonnull(cond);
+    assert_nonnull(mtx);
+    e = pthread_cond_wait(cond, mtx);
+    assert(e == 0);
+}
+
+void pthread_cond_signal_safe(pthread_cond_t *cond)
+{
+    int e;
+    assert_nonnull(cond);
+    e = pthread_cond_signal(cond);
+    assert(e == 0);
+}
+
+void pthread_cond_destroy_safe(pthread_cond_t *cond)
+{
+    int e;
+    assert_nonnull(cond);
+    e = pthread_cond_destroy(cond);
     assert(e == 0);
 }
 

@@ -239,37 +239,30 @@ static void post_data(csentry_t *);
 
 static void *post_data_thread(void *arg)
 {
-    int e;
     csentry_t *client = (csentry_t *) arg;
 
     assert_nonnull(client);
 
     /* pthread_detach(3) self should always success */
-    e = pthread_detach(pthread_self());
-    assert(e == 0);
+    pthread_detach_safe(pthread_self());
 
-    pmtx_lock(&client->mtx);
+    pthread_mutex_lock_safe(&client->mtx);
     while (client->keepalive) {
-        /* TODO: pthread_cond_wait_safe() */
-        e = pthread_cond_wait(&client->thread_cv, &client->mtx);
-        if (e != 0) fprintf(stderr, "pthread_cond_wait() fail  errno: %d\n", e);
-        assert(e == 0);
+        pthread_cond_wait_safe(&client->thread_cv, &client->mtx);
 
         /* client->mtx already locked upon awake */
         /* TODO: add a flag to indicate if we need to post */
         post_data(client);
     }
-    pmtx_unlock(&client->mtx);
+    pthread_mutex_unlock_safe(&client->mtx);
 
     free((void *) client->pubkey);
     free((void *) client->seckey);
     free((void *) client->store_url);
     cJSON_Delete(client->ctx);
 
-    e = pthread_mutex_destroy(&client->mtx);
-    assert(e == 0);
-    e = pthread_cond_destroy(&client->thread_cv);
-    assert(e == 0);
+    pthread_mutex_destroy_safe(&client->mtx);
+    pthread_cond_destroy_safe(&client->thread_cv);
 
     free(client);
 
@@ -348,11 +341,10 @@ void csentry_destroy(void *arg)
 {
     csentry_t *client = (csentry_t *) arg;
     if (client != NULL) {
-        pmtx_lock(&client->mtx);
+        pthread_mutex_lock_safe(&client->mtx);
         client->keepalive = 0;
-        int e = pthread_cond_signal(&client->thread_cv);
-        assert(e == 0);
-        pmtx_unlock(&client->mtx);
+        pthread_cond_signal_safe(&client->thread_cv);
+        pthread_mutex_unlock_safe(&client->mtx);
     }
 }
 
@@ -482,7 +474,7 @@ static const char *sentry_levels[] = {
     "error", "debug", "info", "warning", "fatal",
 };
 
-#define OPTIONS_TO_LEVEL(opt)   ((opt) >> 29)
+#define OPTIONS_TO_LEVEL(opt)   ((opt) >> 29u)
 
 static void msg_set_level_attr0(cJSON *json, uint32_t i)
 {
@@ -527,7 +519,6 @@ void csentry_capture_message(
     int sz;
     int sz2;
     char *msg;
-    int e;
 
     assert_nonnull(client);
     assert_nonnull(format);
@@ -558,7 +549,7 @@ out_toctou:
         msg = (char *) format;
     }
 
-    pmtx_lock(&client->mtx);
+    pthread_mutex_lock_safe(&client->mtx);
 
     msg_set_level_attr(client, options);
 
@@ -597,10 +588,9 @@ out_toctou:
 #endif
 
     client->post_done = 0;
-    e = pthread_cond_signal(&client->thread_cv);
-    assert(e == 0);
+    pthread_cond_signal_safe(&client->thread_cv);
     /* TODO: remove temporary attributes in `attr' */
-    pmtx_unlock(&client->mtx);
+    pthread_mutex_unlock_safe(&client->mtx);
 
     if (msg != format) free(msg);
 }
@@ -611,7 +601,7 @@ static void breadcrumb_set_level_attr(cJSON *breadcrumb, uint32_t options)
     assert_nonnull(breadcrumb);
 
     /* Switch position of error and info */
-    if (i == 0 || i == 2) i ^= 2;
+    if (i == 0 || i == 2) i ^= 2u;
 
     /* Default breadcrumb level is info */
     if (i != 2) msg_set_level_attr0(breadcrumb, i);
@@ -722,7 +712,7 @@ out_toctou:
         }
     }
 
-    pmtx_lock(&client->mtx);
+    pthread_mutex_lock_safe(&client->mtx);
 
     json = cJSON_GetObjectItem(client->ctx, "breadcrumbs");
     if (cJSON_IsObject(json)) {
@@ -763,7 +753,7 @@ out_add_values:
     }
 
 out_unlock:
-    pmtx_unlock(&client->mtx);
+    pthread_mutex_unlock_safe(&client->mtx);
 
     if (msg != format) free(msg);
 }
@@ -773,9 +763,9 @@ void csentry_get_last_event_id(void *client0, uuid_t uuid)
     csentry_t *client = (csentry_t *) client0;
     assert_nonnull(client);
     assert_nonnull(uuid);
-    pmtx_lock(&client->mtx);
+    pthread_mutex_lock_safe(&client->mtx);
     (void) memcpy(uuid, client->last_event_id, sizeof(uuid_t));
-    pmtx_unlock(&client->mtx);
+    pthread_mutex_unlock_safe(&client->mtx);
 }
 
 void csentry_get_last_event_id_string(void *client0, uuid_string_t out)
@@ -783,9 +773,9 @@ void csentry_get_last_event_id_string(void *client0, uuid_string_t out)
     csentry_t *client = (csentry_t *) client0;
     assert_nonnull(client);
     assert_nonnull(out);
-    pmtx_lock(&client->mtx);
+    pthread_mutex_lock_safe(&client->mtx);
     uuid_unparse_lower(client->last_event_id, out);
-    pmtx_unlock(&client->mtx);
+    pthread_mutex_unlock_safe(&client->mtx);
 }
 
 /**
@@ -925,9 +915,9 @@ char * _nullable csentry_ctx_get(void *client0)
 
     assert_nonnull(client);
 
-    pmtx_lock(&client->mtx);
+    pthread_mutex_lock_safe(&client->mtx);
     p = cJSON_Print(client->ctx);
-    pmtx_unlock(&client->mtx);
+    pthread_mutex_unlock_safe(&client->mtx);
 
     return p;
 }
@@ -1000,7 +990,7 @@ void csentry_ctx_clear(void *client0)
 
     assert_nonnull(client);
 
-    pmtx_lock(&client->mtx);
+    pthread_mutex_lock_safe(&client->mtx);
     cJSON_Delete(client->ctx);
     client->ctx = cJSON_CreateObject();
     assert_nonnull(client->ctx);
@@ -1047,6 +1037,6 @@ void csentry_ctx_clear(void *client0)
         populate_contexts(client->ctx);
     }
 
-    pmtx_unlock(&client->mtx);
+    pthread_mutex_unlock_safe(&client->mtx);
 }
 

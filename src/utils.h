@@ -53,8 +53,13 @@ void format_iso_8601_time(char *);
 int uuid_parse32(const char *, uuid_t);
 void uuid_string_random(uuid_string_t);
 
-void pmtx_lock(pthread_mutex_t *mtx);
-void pmtx_unlock(pthread_mutex_t *mtx);
+void pthread_detach_safe(pthread_t thd);
+void pthread_mutex_lock_safe(pthread_mutex_t *);
+void pthread_mutex_unlock_safe(pthread_mutex_t *);
+void pthread_mutex_destroy_safe(pthread_mutex_t *);
+void pthread_cond_wait_safe(pthread_cond_t *, pthread_mutex_t *);
+void pthread_cond_signal_safe(pthread_cond_t *);
+void pthread_cond_destroy_safe(pthread_cond_t *);
 
 int cjson_add_or_update_object(cJSON *, const char *, cJSON * _nullable);
 int cjson_add_object(cJSON *, const char *, cJSON * _nullable);
