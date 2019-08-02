@@ -49,16 +49,16 @@ typedef struct {
 typedef struct {
     const char *str;
     ssize_t size;
-} strbuf_t;
+} string_t;
 
-static strbuf_t STRBUF_NULL = {NULL, 0};
+static string_t STRING_NULL = {NULL, 0};
 
 static const char *http_scheme_string[] = {
     "http://",
     "https://",
 };
 
-static int strbuf_eq(const strbuf_t *a, const strbuf_t *b)
+static int string_eq(const string_t *a, const string_t *b)
 {
     assert_nonnull(a);
     assert_nonnull(b);
@@ -70,8 +70,8 @@ static int strbuf_eq(const strbuf_t *a, const strbuf_t *b)
  */
 static int parse_keys(
         const char *str,
-        strbuf_t *pubkey,
-        strbuf_t *seckey)
+        string_t *pubkey,
+        string_t *seckey)
 {
     int e = 0;
 
@@ -102,14 +102,14 @@ out_no_seckey:
         pubkey->str = str;
         pubkey->size = at - str;
 
-        *seckey = STRBUF_NULL;
+        *seckey = STRING_NULL;
     }
 
 out_exit:
     return e;
 }
 
-static int parse_host(const char *str, strbuf_t *host)
+static int parse_host(const char *str, string_t *host)
 {
     int e = 0;
     const char *slash;
@@ -151,9 +151,9 @@ static int parse_dsn(csentry_t *client, const char *dsn)
     int e = 0;
 
     http_scheme scheme;
-    strbuf_t pubkey;
-    strbuf_t seckey;
-    strbuf_t host;
+    string_t pubkey;
+    string_t seckey;
+    string_t host;
     const char *projid;
     size_t n;
 
@@ -174,7 +174,7 @@ static int parse_dsn(csentry_t *client, const char *dsn)
         set_err_jmp(-1, exit);
     }
 
-    if (strbuf_eq(&seckey, &STRBUF_NULL)) {
+    if (string_eq(&seckey, &STRING_NULL)) {
         dsn += pubkey.size + 1;                 /* +1 for '@' */
     } else {
         dsn += pubkey.size + seckey.size + 2;   /* +2 for ":@" */
