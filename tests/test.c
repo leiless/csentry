@@ -44,11 +44,13 @@ static void baseline_test(void)
 
     csentry_capture_message(handle, NULL, CSENTRY_LEVEL_DEBUG, "hello world");
     csentry_get_last_event_id(handle, u);
-    csentry_get_last_event_id_string(handle, uu1);
-    uuid_unparse_lower(u, uu2);
-    assert(!strcmp(uu1, uu2));
-    LOG("Last event id: %s", uu1);
+    uuid_unparse_lower(u, uu1);
+    csentry_get_last_event_id_string(handle, uu2);
+
     csentry_debug(handle);
+
+    LOG("UUID #1: %s", uu1);
+    LOG("UUID #2: %s", uu2);
 
     ctx_str = csentry_ctx_get(handle);
     LOG("ctx: %s", ctx_str);

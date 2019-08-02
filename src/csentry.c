@@ -42,7 +42,7 @@ typedef struct {
     /* Used for POST data thread */
     pthread_t thread;
     volatile int keepalive;
-    pthread_mutex_t thread_mp;
+    volatile int post_done;
     pthread_cond_t thread_cv;
 } csentry_t;
 
@@ -248,17 +248,30 @@ static void *post_data_thread(void *arg)
     e = pthread_detach(pthread_self());
     assert(e == 0);
 
-    /* TODO */
-    pmtx_lock(&client->thread_mp);
+    pmtx_lock(&client->mtx);
     while (client->keepalive) {
         /* TODO: pthread_cond_wait_safe() */
-        e = pthread_cond_wait(&client->thread_cv, &client->thread_mp);
+        e = pthread_cond_wait(&client->thread_cv, &client->mtx);
+        if (e != 0) fprintf(stderr, "pthread_cond_wait() fail  errno: %d\n", e);
         assert(e == 0);
 
+        /* client->mtx already locked upon awake */
+        /* TODO: add a flag to indicate if we need to post */
         post_data(client);
-        cJSON_DeleteItemFromObject(client->ctx, "breadcrumbs");
     }
-    pmtx_unlock(&client->thread_mp);
+    pmtx_unlock(&client->mtx);
+
+    free((void *) client->pubkey);
+    free((void *) client->seckey);
+    free((void *) client->store_url);
+    cJSON_Delete(client->ctx);
+
+    e = pthread_mutex_destroy(&client->mtx);
+    assert(e == 0);
+    e = pthread_cond_destroy(&client->thread_cv);
+    assert(e == 0);
+
+    free(client);
 
     pthread_exit(NULL);
 }
@@ -310,6 +323,11 @@ void * _nullable csentry_new(
     printf("\n");
 
     client->keepalive = 1;
+    client->post_done = 1;
+
+    client->mtx = __static_mutex;
+    client->thread_cv = __static_cond;
+
     e = pthread_create(&client->thread, NULL, post_data_thread, client);
     if (e != 0) {
         errno = e;
@@ -317,9 +335,6 @@ void * _nullable csentry_new(
         client = NULL;
         goto out_exit;
     }
-
-    client->thread_mp = __static_mutex;
-    client->thread_cv = __static_cond;
 
     if (install_handlers) {
         /* TODO: capture signals */
@@ -333,18 +348,11 @@ void csentry_destroy(void *arg)
 {
     csentry_t *client = (csentry_t *) arg;
     if (client != NULL) {
-        pmtx_lock(&client->thread_mp);
+        pmtx_lock(&client->mtx);
         client->keepalive = 0;
         int e = pthread_cond_signal(&client->thread_cv);
         assert(e == 0);
-        pmtx_unlock(&client->thread_mp);
-
-        free((void *) client->pubkey);
-        free((void *) client->seckey);
-        free((void *) client->store_url);
-        cJSON_Delete(client->ctx);
-        free(client);
-        /* TODO: destroy mutex/cond/thread */
+        pmtx_unlock(&client->mtx);
     }
 }
 
@@ -417,6 +425,8 @@ static void post_data(csentry_t *client)
     int n;
     assert_nonnull(client);
 
+    if (client->post_done) return;
+
     if (client->seckey) {
         /* NOTE: sentry_secret is obsoleted */
         n = snprintf(xauth, X_AUTH_HEADER_SIZE,
@@ -452,6 +462,7 @@ static void post_data(csentry_t *client)
     assert(e == CURLE_OK);
 
     curl_ez_reply rep = curl_ez_post_json(ez, client->store_url, client->ctx, 0);
+    client->post_done = 1;
     if (rep.status_code > 0) {
         update_last_event_id(client, &rep);
 
@@ -461,6 +472,8 @@ static void post_data(csentry_t *client)
         printf("Cannot post message\n");
     }
 
+    /* Delete breadcrumbs after each post */
+    cJSON_DeleteItemFromObject(client->ctx, "breadcrumbs");
     curl_ez_free(ez);
 }
 
@@ -581,17 +594,12 @@ out_toctou:
 
 #if 0
     post_data(client);
-    cJSON_DeleteItemFromObject(client->ctx, "breadcrumbs");
 #endif
 
-    /* TODO: async post */
-    pmtx_lock(&client->thread_mp);
+    client->post_done = 0;
     e = pthread_cond_signal(&client->thread_cv);
     assert(e == 0);
-    pmtx_unlock(&client->thread_mp);
-
     /* TODO: remove temporary attributes in `attr' */
-
     pmtx_unlock(&client->mtx);
 
     if (msg != format) free(msg);
