@@ -15,6 +15,12 @@
 #define assert_nonnull(p)       assert((p) != NULL)
 #endif
 
+#define UTILS_MIN(a, b) ({      \
+    __typeof(a) _a = (a);       \
+    __typeof(b) _b = (b);       \
+    _a < _b ? _a : _b;          \
+})
+
 #define ARRAY_SIZE(a)           (sizeof(a) / sizeof(*(a)))
 
 /**

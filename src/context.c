@@ -2,6 +2,8 @@
  * Created 190803 lynnl
  */
 
+#include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 #include <errno.h>
 #include <sys/param.h>
@@ -113,6 +115,67 @@ static ssize_t get_kernel_version(char *buf, size_t sz)
     return -1;
 }
 
+static ssize_t get_hw_model(char *buf, size_t sz)
+{
+    assert_nonnull(buf);
+
+#if defined(__linux__)
+    static const char *cpuinfo = "/proc/cpuinfo";
+    ssize_t out = -1;
+    FILE *fp;
+    char line[160];
+    char *p;
+    size_t n;
+
+    fp = fopen(cpuinfo, "r");
+    if (fp == NULL) goto out_exit;
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strprefix(line, "model name")) {
+            p = strchr(line, ':');
+            if (p != NULL) {
+                while (isspace(*++p)) continue;
+
+                n = strlen(p);
+                if (p[n-1] == '\n') p[--n] = '\0';
+
+                (void) strncpy(buf, p, sz);
+                out = UTILS_MIN(sz, n);
+            }
+            break;
+        }
+    }
+
+    (void) fclose(fp);
+out_exit:
+    return out;
+#elif defined(__NetBSD__)
+    if (sysctlbyname("machdep.cpu_brand", buf, &sz, NULL, 0) < 0) {
+        return -1;
+    }
+    return sz;
+#elif defined(BSD)
+    int mib[2] = {CTL_HW, HW_MODEL};
+    if (sysctl(mib, ARRAY_SIZE(mib), buf, &sz, NULL, 0) < 0) {
+        return -1;
+    }
+    return sz;
+#else
+#pragma GCC error "Unsupported operating system!"
+#endif
+}
+
+static ssize_t get_device_arch(char *buf, size_t sz)
+{
+    struct utsname u;
+    assert_nonnull(buf);
+    if (uname(&u) == 0) {
+        (void) strncpy(buf, u.machine, sz);
+        return strlen(buf);
+    }
+    return -1;
+}
+
 void populate_contexts(cJSON *ctx)
 {
     cJSON *contexts;
@@ -143,15 +206,16 @@ void populate_contexts(cJSON *ctx)
 
     device = cJSON_AddObjectToObject(contexts, "device");
     if (device != NULL) {
-#ifdef __APPLE__
-        (void) cJSON_AddStringToObject(device, "model", CONST_HW_MODEL);
-#else
-        /* If contexts.device.family absent  A default value "Unknown Device" will be used */
-#endif
+        /* If contexts.device.model absent  "Unknown Device" will be displayed in Sentry */
+        sz = get_hw_model(buffer, sizeof(buffer));
+        if (sz > 0) (void) cJSON_AddStringToObject(device, "model", buffer);
 
-        (void) cJSON_AddStringToObject(device, "arch", CONST_CMAKE_SYSTEM_PROCESSOR);
+        sz = get_device_arch(buffer, sizeof(buffer));
+        if (sz > 0) (void) cJSON_AddStringToObject(device, "arch", buffer);
+
         (void) cJSON_AddNumberToObject(device, "memory_size", CONST_PHYS_MEM_TOTAL);
         (void) cJSON_AddNumberToObject(device, "free_memory", CONST_PHYS_MEM_FREE);
+
         (void) cJSON_AddNumberToObject(device, "core", CONST_PHYS_CORES);
         (void) cJSON_AddNumberToObject(device, "socket", CONST_LOGI_CORES);
     }
@@ -159,9 +223,10 @@ void populate_contexts(cJSON *ctx)
     app = cJSON_AddObjectToObject(contexts, "app");
     if (app != NULL) {
         (void) cJSON_AddStringToObject(app, "build_type", CONST_CMAKE_BUILD_TYPE);
+        (void) cJSON_AddNumberToObject(app, "pointer_bits", sizeof(void *) << 3u);
+
         (void) cJSON_AddStringToObject(app, "c_flags", CONST_CMAKE_C_FLAGS);
         (void) cJSON_AddStringToObject(app, "compile_definitions", CONST_COMPILE_DEFINITIONS);
-        (void) cJSON_AddNumberToObject(app, "pointer_bits", CONST_PTR_BITS);
     }
 }
 
