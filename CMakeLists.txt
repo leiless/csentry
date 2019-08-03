@@ -82,6 +82,7 @@ add_executable(test
     src/curl_ez.h
     src/utils.h
     src/utils.c
+    src/log.h
     tests/test.c
 )
 target_link_libraries(test ${LIBS})

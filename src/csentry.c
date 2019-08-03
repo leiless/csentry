@@ -1,5 +1,6 @@
 /*
  * Created 190622 lynnl
+ * see: LICENSE
  */
 
 #include <stdio.h>
@@ -11,7 +12,6 @@
 #include <stdarg.h>
 #include <pwd.h>
 #include <unistd.h>
-
 #include <pthread.h>
 
 #include <uuid/uuid.h>
@@ -19,6 +19,7 @@
 #include <curl/curl.h>
 #include <cjson/cJSON.h>
 
+#include "log.h"
 #include "utils.h"
 #include "csentry.h"
 #include "curl_ez.h"
@@ -190,11 +191,11 @@ static int parse_dsn(csentry_t *client, const char *dsn)
     }
     projid = dsn;
 
-    printf("Scheme: %s\n", http_scheme_string[scheme]);
-    printf("Pubkey: %.*s\n", (int) pubkey.size, pubkey.str);
-    printf("Seckey: %.*s\n", (int) seckey.size, seckey.str);
-    printf("Host: %.*s\n", (int) host.size, host.str);
-    printf("Projid: %s\n", projid);
+    LOG_DBG("Scheme: %s", http_scheme_string[scheme]);
+    LOG_DBG("Pubkey: %.*s", (int) pubkey.size, pubkey.str);
+    LOG_DBG("Seckey: %.*s", (int) seckey.size, seckey.str);
+    LOG_DBG("Host: %.*s", (int) host.size, host.str);
+    LOG_DBG("Projid: %s", projid);
 
     client->pubkey = strndup(pubkey.str, pubkey.size);
     if (client->pubkey == NULL) set_err_jmp(-1, exit);
@@ -220,9 +221,9 @@ static int parse_dsn(csentry_t *client, const char *dsn)
     (void) snprintf((char *) client->store_url, n, "%s%.*s/api/%s/store/",
             http_scheme_string[scheme], (int) host.size, host.str, projid);
 
-    printf("> %s\n", client->pubkey);
-    printf("> %s\n", client->seckey);
-    printf("> %s\n", client->store_url);
+    LOG_DBG("pubkey: %s", client->pubkey);
+    LOG_DBG("seckey: %s", client->seckey);
+    LOG_DBG("store_url: %s", client->store_url);
 
 out_exit:
     return e;
@@ -251,7 +252,6 @@ static void *post_data_thread(void *arg)
         pthread_cond_wait_safe(&client->thread_cv, &client->mtx);
 
         /* client->mtx already locked upon awake */
-        /* TODO: add a flag to indicate if we need to post */
         post_data(client);
     }
     pthread_mutex_unlock_safe(&client->mtx);
@@ -312,8 +312,7 @@ void * _nullable csentry_new(
     }
 
     client->sample_rate = (int) (sample_rate * 100);
-    printf("> sample_rate: %d\n", client->sample_rate);
-    printf("\n");
+    LOG_DBG("sample_rate: %d", client->sample_rate);
 
     client->keepalive = 1;
     client->post_done = 1;
@@ -358,24 +357,24 @@ void csentry_debug(void *client0)
     char *ctx;
 
     if (client == NULL) {
-        fprintf(stderr, "%s() called with NULL argument, do nop.\n", __func__);
+        LOG_ERR("Met NULL argument, do nop.");
         return;
     }
 
     uuid_unparse_lower(client->last_event_id, uu);
     ctx = cJSON_Print(client->ctx);
 
-    fprintf(stderr, "cSentry handle: %p\n"
-                    "\tpubkey: %s\n"
-                    "\tseckey: %s\n"
-                    "\tstore_url: %s\n"
-                    "\tsample_rate: %d\n"
-                    "\tctx: %s\n"
-                    "\tlast_event_id: %s\n"
-                    "\tmtx: %p\n",
-            client, client->pubkey, client->seckey,
-            client->store_url, client->sample_rate,
-            ctx, uu, &client->mtx);
+    LOG("cSentry handle: %p\n"
+        "\tpubkey: %s\n"
+        "\tseckey: %s\n"
+        "\tstore_url: %s\n"
+        "\tsample_rate: %d\n"
+        "\tctx: %s\n"
+        "\tlast_event_id: %s\n"
+        "\tmtx: %p\n",
+        client, client->pubkey, client->seckey,
+        client->store_url, client->sample_rate,
+        ctx, uu, &client->mtx);
 
     free(ctx);
 }
@@ -394,7 +393,10 @@ static void update_last_event_id(csentry_t *client, const curl_ez_reply *rep)
     assert_nonnull(rep->data);
 
     json = cJSON_Parse(rep->data);
-    if (json == NULL) return;
+    if (json == NULL) {
+        LOG_ERR("cJSON_Parse() fail  data: %s", rep->data);
+        return;
+    }
 
     id = cJSON_GetObjectItem(json, "id");
     if (id != NULL) {
@@ -403,6 +405,8 @@ static void update_last_event_id(csentry_t *client, const curl_ez_reply *rep)
             /* XXX: client->mtx already locked previously */
             (void) memcpy(client->last_event_id, uu, sizeof(uuid_t));
         }
+    } else {
+        LOG_ERR("Cannot get `id' from json object  data: %s", rep->data);
     }
 
     cJSON_Delete(json);
@@ -444,8 +448,7 @@ static void post_data(csentry_t *client)
     }
 
     assert(n < X_AUTH_HEADER_SIZE);
-
-    printf("size: %d auth: %s\n", n, xauth);
+    LOG_DBG("size: %d auth: %s", n, xauth);
 
     curl_ez_t *ez = curl_ez_new();
     assert_nonnull(ez);
@@ -458,10 +461,8 @@ static void post_data(csentry_t *client)
     if (rep.status_code > 0) {
         update_last_event_id(client, &rep);
 
-        printf("status code: %d\ndata: %s\n", rep.status_code, rep.data);
+        LOG_DBG("status code: %d data: %s", rep.status_code, rep.data);
         free(rep.data);
-    } else {
-        printf("Cannot post message\n");
     }
 
     /* Delete breadcrumbs after each post */
@@ -580,16 +581,11 @@ out_toctou:
     }
 
     char *str = cJSON_Print(client->ctx);
-    printf("%s\n", str);
+    LOG_DBG("%s", str);
     free(str);
-
-#if 0
-    post_data(client);
-#endif
 
     client->post_done = 0;
     pthread_cond_signal_safe(&client->thread_cv);
-    /* TODO: remove temporary attributes in `attr' */
     pthread_mutex_unlock_safe(&client->mtx);
 
     if (msg != format) free(msg);
@@ -600,7 +596,7 @@ static void breadcrumb_set_level_attr(cJSON *breadcrumb, uint32_t options)
     uint32_t i = OPTIONS_TO_LEVEL(options);
     assert_nonnull(breadcrumb);
 
-    /* Switch position of error and info */
+    /* Swap position of error and info */
     if (i == 0 || i == 2) i ^= 2u;
 
     /* Default breadcrumb level is info */
@@ -612,7 +608,7 @@ static const char *breadcrumb_types[] = {
     "default", "http", "error",
 };
 
-#define OPTIONS_TO_TYPE(opt)    (((opt) >> 27) & 0x3)
+#define OPTIONS_TO_TYPE(opt)    (((opt) >> 27u) & 0x3u)
 
 static void breadcrumb_set_type_attr(cJSON *breadcrumb, uint32_t options)
 {
@@ -650,8 +646,10 @@ void csentry_add_breadcrumb(
     assert_nonnull(format);
 
     breadcrumb = cJSON_CreateObject();
-    /* TODO: graceful failures for ENOMEM? */
-    if (breadcrumb == NULL) return;
+    if (breadcrumb == NULL) {
+        LOG_ERR("cJSON_CreateObject() fail  ENOMEM?!");
+        return;
+    }
 
 out_toctou:
     va_start(ap, format);
@@ -874,12 +872,12 @@ int csentry_ctx_update(void *client0, const cJSON * _nullable ctx)
     cJSON_ArrayForEach(iter, ctx) {
         if (iter->string == NULL) continue;
 
-        printf("%s\n", iter->string);
+        LOG_DBG("%s\n", iter->string);
 
         if (is_known_ctx_name(iter->string)) {
             (void) csentry_ctx_update0(client, iter->string, iter);
 
-            printf("Merging %s into cSentry context\n", iter->string);
+            LOG_DBG("Merging %s into cSentry context\n", iter->string);
         } else {
             /* Unknown context names will be simply ignored */
         }
