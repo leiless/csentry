@@ -27,6 +27,7 @@ if (${UNIX})
 endif()
 
 if (${APPLE})
+    add_link_options(-framework CoreFoundation)
     find_program(SYSCTL_TOOL sysctl)
     execute_process(
             COMMAND ${SYSCTL_TOOL} -n hw.model
@@ -83,6 +84,8 @@ add_executable(test
     src/utils.h
     src/utils.c
     src/log.h
+    src/context.h
+    src/context.c
     tests/test.c
 )
 target_link_libraries(test ${LIBS})

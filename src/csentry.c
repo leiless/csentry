@@ -24,6 +24,7 @@
 #include "csentry.h"
 #include "curl_ez.h"
 #include "constants.h"
+#include "context.h"
 
 typedef enum {
     HTTP_SCHEME = 0,
@@ -923,7 +924,7 @@ char * _nullable csentry_ctx_get(void *client0)
 /**
  * TODO: retrieve system info on-the-fly
  */
-static void populate_contexts(cJSON *ctx)
+static void populate_contexts_deprecated(cJSON *ctx)
 {
     cJSON *contexts;
     cJSON *os;
@@ -1032,6 +1033,7 @@ void csentry_ctx_clear(void *client0)
             cJSON_AddItemToObject(client->ctx, "sdk", sdk);
         }
 
+        UNUSED(populate_contexts_deprecated);
         populate_contexts(client->ctx);
     }
 
