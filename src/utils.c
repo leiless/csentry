@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <stdlib.h>
+#include <errno.h>
 
 #include "utils.h"
 
@@ -243,5 +245,33 @@ cJSON * _nullable cjson_set_default_str_to_obj(
     }
 
     return cJSON_AddStringToObject(obj, name, str);
+}
+
+/**
+ * [sic strtoll(3)] Convert a string value to a long long
+ *
+ * @str     the value string
+ * @delim   delimiter character(an invalid one) for a success match
+ *          note '\0' for a strict match
+ *          other value indicate a substring conversion
+ * @base    numeric base
+ * @val     where to store parsed long value
+ * @return  1 if parsed successfully  0 o.w.
+ *
+ * @see:    https://stackoverflow.com/a/14176593/10725426
+ */
+int parse_llong(const char *str, char delim, int base, long long *val)
+{
+    int ok;
+    char *p;
+    long long t;
+
+    errno = 0;
+    t = strtoll(str, &p, base);
+
+    ok = errno == 0 && *p == delim;
+    if (ok) *val = t;
+
+    return ok;
 }
 

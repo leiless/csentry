@@ -82,5 +82,7 @@ cJSON * _nullable cjson_set_default_str_to_obj(
     cJSON *, const char *, const char *
 );
 
+int parse_llong(const char *, char, int, long long *);
+
 #endif /* CSENTRY_UTILS_H */
 

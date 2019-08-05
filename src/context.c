@@ -9,8 +9,10 @@
 #include <sys/param.h>
 #include <sys/utsname.h>
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__MACH__)
 #include <CoreFoundation/CoreFoundation.h>
+#include <mach/mach_init.h>
+#include <mach/mach_host.h>
 #endif
 
 #if defined(BSD)
@@ -30,7 +32,7 @@ static ssize_t get_kernel_name(char *buf, size_t sz)
 {
     assert_nonnull(buf);
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) && defined(__MACH__)
     /* macOS is more meaningful instead of Darwin */
     return snprintf(buf, sz, "macOS");
 #elif defined(__linux__)
@@ -46,7 +48,7 @@ static ssize_t get_kernel_name(char *buf, size_t sz)
 #endif
 }
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__MACH__)
 /*
  * Private #include <CoreFoundation/CFPriv.h>
  * see: DarwinTools/sw_vers.c
@@ -64,7 +66,7 @@ CF_EXPORT const CFStringRef _kCFSystemVersionBuildVersionKey;
  */
 static ssize_t get_os_version(char *buf, size_t sz)
 {
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__MACH__)
     ssize_t out = -1;
     CFDictionaryRef d;
     CFStringRef s;
@@ -176,6 +178,140 @@ static ssize_t get_device_arch(char *buf, size_t sz)
     return -1;
 }
 
+#ifdef __linux__
+/**
+ * Fetch information from /proc/meminfo
+ * @return      Memory info size in bytes
+ *              -1 if any error
+ */
+static int64_t get_proc_meminfo(const char *category)
+{
+    static const char *cpuinfo = "/proc/meminfo";
+    long long bytes = -1;
+    FILE *fp;
+    char line[160];
+    char *p;
+
+    assert_nonnull(category);
+
+    fp = fopen(cpuinfo, "r");
+    if (fp == NULL) goto out_exit;
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strprefix(line, category)) {
+            for (p = line; *p && !isdigit(*p); p++) continue;
+            if (*p != '\0' && parse_llong(p, ' ', 10, &bytes)) {
+                assert(bytes >= 0);
+                bytes <<= 10u;
+                assert(bytes >= 0);
+            }
+            break;
+        }
+    }
+
+    (void) fclose(fp);
+out_exit:
+    return (int64_t) bytes;
+}
+#endif
+
+/**
+ * @return  Total physical memory size in bytes
+ */
+static int64_t get_phys_memsize(void)
+{
+#if defined(__linux__)
+    return get_proc_meminfo("MemTotal:");
+#elif defined(BSD)
+#if defined(__APPLE__) && defined(__MACH__)
+    int mib[] = {CTL_HW, HW_MEMSIZE};
+#elif defined(HW_PHYSMEM64)
+    /* NetBSD/OpenBSD uses HW_PHYSMEM64 */
+    int mib[] = {CTL_HW, HW_PHYSMEM64};
+#else
+    int mib[] = {CTL_HW, HW_PHYSMEM};
+#endif
+
+    int64_t memsize;
+    size_t n = sizeof(memsize);
+    if (sysctl(mib, ARRAY_SIZE(mib), &memsize, &n, NULL, 0) != 0) {
+        return -1;
+    }
+    assert(memsize > 0);
+    return memsize;
+#else
+#pragma GCC error "Unsupported operating system!"
+#endif
+}
+
+#if defined(__APPLE__) && defined(__MACH__)
+/**
+ * @return      1 if success, 0 otherwise.
+ */
+static int vm_stat64(
+        vm_statistics64_data_t * const v,
+        vm_size_t * const pgsz)
+{
+    mach_port_t host = mach_host_self();
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+
+    assert_nonnull(v);
+    assert_nonnull(pgsz);
+
+    return host_page_size(host, pgsz) == KERN_SUCCESS &&
+           host_statistics64(host, HOST_VM_INFO64,
+                             (host_info64_t) v, &count) == KERN_SUCCESS;
+}
+
+/**
+ * @return      Free memory size in bytes
+ *              0 if any failure
+ * see:
+ *  https://www.jianshu.com/p/74ee9ed5546c
+ *  http://archive.fo/B1k5L
+ *  sentry-cocoa/Sources/SentryCrash/Recording/Monitors/SentryCrashMonitor_System.m
+ */
+static uint64_t xnu_get_free_memsize(void)
+{
+    uint64_t mem = 0;
+    vm_statistics64_data_t v;
+    vm_size_t pgsz;
+
+    if (vm_stat64(&v, &pgsz)) {
+        mem = (v.free_count + v.purgeable_count + v.external_page_count) * pgsz;
+    }
+
+    return mem;
+}
+
+static uint64_t xnu_get_usable_memsize(void)
+{
+    uint64_t mem = 0;
+    vm_statistics64_data_t v;
+    vm_size_t pgsz;
+
+    if (vm_stat64(&v, &pgsz)) {
+        mem = (v.free_count + v.active_count +
+               v.inactive_count + v.wire_count) * pgsz;
+    }
+
+    return mem;
+}
+#endif
+
+static int64_t get_free_memsize(void)
+{
+#if defined(__linux__)
+    return get_proc_meminfo("MemAvailable:");
+#elif defined(__APPLE__) && defined(__MACH__)
+    return xnu_get_free_memsize();
+#elif defined(BSD)
+#pragma GCC error "TODO: support various BSD systems!"
+#else
+#pragma GCC error "Unsupported operating system!"
+#endif
+}
+
 void populate_contexts(cJSON *ctx)
 {
     cJSON *contexts;
@@ -184,6 +320,7 @@ void populate_contexts(cJSON *ctx)
     cJSON *app;
     char buffer[160];
     ssize_t sz;
+    int64_t mem;
 
     assert_nonnull(ctx);
     contexts = cJSON_AddObjectToObject(ctx, "contexts");
@@ -213,11 +350,18 @@ void populate_contexts(cJSON *ctx)
         sz = get_device_arch(buffer, sizeof(buffer));
         if (sz > 0) (void) cJSON_AddStringToObject(device, "arch", buffer);
 
-        (void) cJSON_AddNumberToObject(device, "memory_size", CONST_PHYS_MEM_TOTAL);
-        (void) cJSON_AddNumberToObject(device, "free_memory", CONST_PHYS_MEM_FREE);
+        mem = get_phys_memsize();
+        if (mem > 0) (void) cJSON_AddNumberToObject(device, "memory_size", mem);
 
-        (void) cJSON_AddNumberToObject(device, "core", CONST_PHYS_CORES);
-        (void) cJSON_AddNumberToObject(device, "socket", CONST_LOGI_CORES);
+        mem = get_free_memsize();
+        if (mem > 0) (void) cJSON_AddNumberToObject(device, "free_memory", mem);
+
+#if defined(__APPLE__) && defined(__MACH__)
+        mem = xnu_get_usable_memsize();
+        if (mem > 0) (void) cJSON_AddNumberToObject(device, "usable_memory", mem);
+#endif
+
+        /* TODO: get core/socket info? */
     }
 
     app = cJSON_AddObjectToObject(contexts, "app");
