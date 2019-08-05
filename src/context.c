@@ -299,12 +299,56 @@ static uint64_t xnu_get_usable_memsize(void)
 }
 #endif
 
+#if defined(__FreeBSD__)
+static int64_t freebsd_get_free_memsize(void)
+{
+    static int mib[2] = {CTL_HW, HW_PAGESIZE};
+    int pgsz;
+    uint32_t v[3];
+    size_t len;
+
+    len = sizeof(pgsz);
+    if (sysctl(mib, ARRAY_SIZE(mib), &pgsz, &len, NULL, 0) != 0) {
+        LOG_ERR("sysctl() hw.pagesize fail  errno: %d", errno);
+        return -1;
+    }
+    assert(len == sizeof(pgsz));
+    assert(pgsz >= 0);
+
+    len = sizeof(uint32_t);
+    if (sysctlbyname("vm.stats.vm.v_inactive_count", &v[0], &len, NULL, 0) != 0) {
+        LOG_ERR("sysctlbyname() vm.stats.vm.v_inactive_count fail  errno: %d", errno);
+        return -1;
+    }
+    assert(len == sizeof(uint32_t));
+
+    len = sizeof(uint32_t);
+    if (sysctlbyname("vm.stats.vm.v_cache_count", &v[1], &len, NULL, 0) != 0) {
+        LOG_ERR("sysctlbyname() vm.stats.vm.v_cache_count fail  errno: %d", errno);
+        return -1;
+    }
+    assert(len == sizeof(uint32_t));
+
+    len = sizeof(uint32_t);
+    if (sysctlbyname("vm.stats.vm.v_free_count", &v[2], &len, NULL, 0) != 0) {
+        LOG_ERR("sysctlbyname() vm.stats.vm.v_free_count fail  errno: %d", errno);
+        return -1;
+    }
+    assert(len == sizeof(uint32_t));
+
+    /* page_size * (inactive_count + cache_count + free_count) */
+    return (int64_t) pgsz * (v[0] + v[1] + v[2]);
+}
+#endif
+
 static int64_t get_free_memsize(void)
 {
 #if defined(__linux__)
     return get_proc_meminfo("MemAvailable:");
 #elif defined(__APPLE__) && defined(__MACH__)
     return xnu_get_free_memsize();
+#elif defined(__FreeBSD__)
+    return freebsd_get_free_memsize();
 #elif defined(BSD)
 #pragma GCC error "TODO: support various BSD systems!"
 #else
