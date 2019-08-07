@@ -341,6 +341,29 @@ static int64_t freebsd_get_free_memsize(void)
 }
 #endif
 
+#if defined(__OpenBSD__)
+/**
+ * see: $(vmstat -s), $(systat uvm)
+ */
+static int64_t openbsd_get_free_memsize(void)
+{
+    static int mib[] = {CTL_VM, VM_UVMEXP};
+    struct uvmexp uvm;
+    size_t len = sizeof(uvm);
+
+    if (sysctl(mib, ARRAY_SIZE(mib), &uvm, &len, NULL, 0) != 0) {
+        LOG_ERR("sysctl() vm.uvmexp fail  errno: %d", errno);
+        return -1;
+    }
+    assert(len == sizeof(uvm));
+    assert(uvm.free >= 0);
+    assert(uvm.inactive >= 0);
+    assert(uvm.pageshift > 0);
+
+    return (0LL + uvm.free + uvm.inactive) << uvm.pageshift;
+}
+#endif
+
 static int64_t get_free_memsize(void)
 {
 #if defined(__linux__)
@@ -349,6 +372,8 @@ static int64_t get_free_memsize(void)
     return xnu_get_free_memsize();
 #elif defined(__FreeBSD__)
     return freebsd_get_free_memsize();
+#elif defined(__OpenBSD__)
+    return openbsd_get_free_memsize();
 #elif defined(BSD)
 #pragma GCC error "TODO: support various BSD systems!"
 #else
