@@ -20,6 +20,10 @@
 #include <sys/sysctl.h>
 #endif
 
+#if defined(__NetBSD__)
+#include <uvm/uvm_extern.h>
+#endif
+
 #include "log.h"
 #include "utils.h"
 #include "constants.h"
@@ -44,7 +48,7 @@ static ssize_t get_kernel_name(char *buf, size_t sz)
     }
     return snprintf(buf, sz, "BSD*");
 #else
-#pragma GCC error "Unsupported operating system!"
+#error "Unsupported operating system!"
 #endif
 }
 
@@ -163,7 +167,7 @@ out_exit:
     }
     return sz;
 #else
-#pragma GCC error "Unsupported operating system!"
+#error "Unsupported operating system!"
 #endif
 }
 
@@ -240,7 +244,7 @@ static int64_t get_phys_memsize(void)
     assert(memsize > 0);
     return memsize;
 #else
-#pragma GCC error "Unsupported operating system!"
+#error "Unsupported operating system!"
 #endif
 }
 
@@ -364,6 +368,26 @@ static int64_t openbsd_get_free_memsize(void)
 }
 #endif
 
+#if defined(__NetBSD__)
+static int64_t netbsd_get_free_memsize(void)
+{
+    static int mib[] = {CTL_VM, VM_UVMEXP2};
+    struct uvmexp_sysctl uvm;
+    size_t len = sizeof(uvm);
+
+    if (sysctl(mib, ARRAY_SIZE(mib), &uvm, &len, NULL, 0) != 0) {
+        LOG_ERR("sysctl() vm.uvmexp2 fail  errno: %d", errno);
+        return -1;
+    }
+    assert(len == sizeof(uvm));
+    assert(uvm.free >= 0);
+    assert(uvm.inactive >= 0);
+    assert(uvm.pageshift > 0);
+
+    return (0LL + uvm.free + uvm.inactive) << uvm.pageshift;
+}
+#endif
+
 static int64_t get_free_memsize(void)
 {
 #if defined(__linux__)
@@ -374,10 +398,10 @@ static int64_t get_free_memsize(void)
     return freebsd_get_free_memsize();
 #elif defined(__OpenBSD__)
     return openbsd_get_free_memsize();
-#elif defined(BSD)
-#pragma GCC error "TODO: support various BSD systems!"
+#elif defined(__NetBSD__)
+    return netbsd_get_free_memsize();
 #else
-#pragma GCC error "Unsupported operating system!"
+#error "Unsupported operating system!"
 #endif
 }
 
