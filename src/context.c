@@ -343,48 +343,123 @@ static int64_t freebsd_get_free_memsize(void)
     /* page_size * (inactive_count + cache_count + free_count) */
     return (int64_t) pgsz * (v[0] + v[1] + v[2]);
 }
+
+/**
+ * see: https://github.com/ocochard/myscripts/blob/master/FreeBSD/freebsd-memory.sh
+ */
+static int64_t freebsd_get_usable_memsize(void)
+{
+    static int mib[2] = {CTL_HW, HW_PAGESIZE};
+    int pgsz;
+    uint32_t pgcnt;
+    size_t len;
+
+    len = sizeof(pgsz);
+    if (sysctl(mib, ARRAY_SIZE(mib), &pgsz, &len, NULL, 0) != 0) {
+        LOG_ERR("sysctl() hw.pagesize fail  errno: %d", errno);
+        return -1;
+    }
+    assert(len == sizeof(pgsz));
+    assert(pgsz > 0);
+
+    len = sizeof(pgcnt);
+    if (sysctlbyname("vm.stats.vm.v_page_count", &pgcnt, &len, NULL, 0) != 0) {
+        LOG_ERR("sysctlbyname() vm.stats.vm.v_page_count fail  errno: %d", errno);
+        return -1;
+    }
+    assert(len == sizeof(pgcnt));
+
+    /* Total real memory managed */
+    return (int64_t) pgsz * pgcnt;
+}
 #endif
 
 #if defined(__OpenBSD__)
+/**
+ * see: /usr/include/uvm/uvmexp.h
+ */
+static int openbsd_get_uvmexp(struct uvmexp *uvm)
+{
+    static int mib[] = {CTL_VM, VM_UVMEXP};
+    size_t len = sizeof(*uvm);
+    int e;
+
+    assert_nonnull(uvm);
+
+    if (sysctl(mib, ARRAY_SIZE(mib), uvm, &len, NULL, 0) != 0) {
+        e = errno;
+        LOG_ERR("sysctl() vm.uvmexp fail  errno: %d", e);
+        errno = e;
+        return -1;
+    }
+    assert(len == sizeof(*uvm));
+
+    return 0;
+}
+
 /**
  * see: $(vmstat -s), $(systat uvm)
  */
 static int64_t openbsd_get_free_memsize(void)
 {
-    static int mib[] = {CTL_VM, VM_UVMEXP};
     struct uvmexp uvm;
-    size_t len = sizeof(uvm);
+    if (openbsd_get_uvmexp(&uvm) != 0) return -1;
 
-    if (sysctl(mib, ARRAY_SIZE(mib), &uvm, &len, NULL, 0) != 0) {
-        LOG_ERR("sysctl() vm.uvmexp fail  errno: %d", errno);
-        return -1;
-    }
-    assert(len == sizeof(uvm));
     assert(uvm.free >= 0);
     assert(uvm.inactive >= 0);
     assert(uvm.pageshift > 0);
-
     return (0LL + uvm.free + uvm.inactive) << uvm.pageshift;
+}
+
+static int64_t openbsd_get_usable_memsize(void)
+{
+    struct uvmexp uvm;
+    if (openbsd_get_uvmexp(&uvm) != 0) return -1;
+
+    assert(uvm.npages > 0);
+    assert(uvm.pageshift > 0);
+    return (int64_t) uvm.npages << uvm.pageshift;
 }
 #endif
 
 #if defined(__NetBSD__)
-static int64_t netbsd_get_free_memsize(void)
+static int netbsd_get_uvmexp2(struct uvmexp_sysctl *uvm)
 {
-    static int mib[] = {CTL_VM, VM_UVMEXP2};
-    struct uvmexp_sysctl uvm;
-    size_t len = sizeof(uvm);
+    static const int mib[] = {CTL_VM, VM_UVMEXP2};
+    size_t len = sizeof(*uvm);
 
-    if (sysctl(mib, ARRAY_SIZE(mib), &uvm, &len, NULL, 0) != 0) {
+    assert_nonnull(uvm);
+
+    if (sysctl(mib, ARRAY_SIZE(mib), uvm, &len, NULL, 0) != 0) {
         LOG_ERR("sysctl() vm.uvmexp2 fail  errno: %d", errno);
         return -1;
     }
-    assert(len == sizeof(uvm));
+    assert(len == sizeof(*uvm));
+
+    return 0;
+}
+
+static int64_t netbsd_get_free_memsize(void)
+{
+    struct uvmexp_sysctl uvm;
+
+    if (netbsd_get_uvmexp2(&uvm) != 0) return -1;
     assert(uvm.free >= 0);
     assert(uvm.inactive >= 0);
     assert(uvm.pageshift > 0);
 
-    return (0LL + uvm.free + uvm.inactive) << uvm.pageshift;
+    return (uvm.free + uvm.inactive) << uvm.pageshift;
+}
+
+static int64_t netbsd_get_usable_memsize(void)
+{
+    struct uvmexp_sysctl uvm;
+
+    if (netbsd_get_uvmexp2(&uvm) != 0) return -1;
+    assert(uvm.npages > 0);
+    assert(uvm.pageshift > 0);
+
+    return uvm.npages << uvm.pageshift;
 }
 #endif
 
@@ -400,6 +475,23 @@ static int64_t get_free_memsize(void)
     return openbsd_get_free_memsize();
 #elif defined(__NetBSD__)
     return netbsd_get_free_memsize();
+#else
+#error "Unsupported operating system!"
+#endif
+}
+
+static int64_t get_usable_free_memsize(void)
+{
+#if defined(__linux__)
+#error "TODO: support for Linux"
+#elif defined(__APPLE__) && defined(__MACH__)
+    return xnu_get_usable_memsize();
+#elif defined(__FreeBSD__)
+    return freebsd_usable_usable_memsize();
+#elif defined(__OpenBSD__)
+    return openbsd_usable_free_memsize();
+#elif defined(__NetBSD__)
+    return netbsd_usable_free_memsize();
 #else
 #error "Unsupported operating system!"
 #endif
@@ -449,10 +541,8 @@ void populate_contexts(cJSON *ctx)
         mem = get_free_memsize();
         if (mem > 0) (void) cJSON_AddNumberToObject(device, "free_memory", mem);
 
-#if defined(__APPLE__) && defined(__MACH__)
-        mem = xnu_get_usable_memsize();
+        mem = get_usable_free_memsize();
         if (mem > 0) (void) cJSON_AddNumberToObject(device, "usable_memory", mem);
-#endif
 
         /* TODO: get core/socket info? */
     }
