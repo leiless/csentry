@@ -304,20 +304,33 @@ static uint64_t xnu_get_usable_memsize(void)
 #endif
 
 #if defined(__FreeBSD__)
-static int64_t freebsd_get_free_memsize(void)
+static int freebsd_get_page_size(void)
 {
     static int mib[2] = {CTL_HW, HW_PAGESIZE};
     int pgsz;
-    uint32_t v[3];
     size_t len;
+    int e;
 
     len = sizeof(pgsz);
     if (sysctl(mib, ARRAY_SIZE(mib), &pgsz, &len, NULL, 0) != 0) {
-        LOG_ERR("sysctl() hw.pagesize fail  errno: %d", errno);
+        e = errno;
+        LOG_ERR("sysctl() hw.pagesize fail  errno: %d", e);
+        errno = e;
         return -1;
     }
     assert(len == sizeof(pgsz));
     assert(pgsz >= 0);
+
+    return pgsz;
+}
+
+static int64_t freebsd_get_free_memsize(void)
+{
+    int pgsz;
+    uint32_t v[3];
+    size_t len;
+
+    if ((pgsz = freebsd_get_page_size()) < 0) return -1;
 
     len = sizeof(uint32_t);
     if (sysctlbyname("vm.stats.vm.v_inactive_count", &v[0], &len, NULL, 0) != 0) {
@@ -349,18 +362,11 @@ static int64_t freebsd_get_free_memsize(void)
  */
 static int64_t freebsd_get_usable_memsize(void)
 {
-    static int mib[2] = {CTL_HW, HW_PAGESIZE};
     int pgsz;
     uint32_t pgcnt;
     size_t len;
 
-    len = sizeof(pgsz);
-    if (sysctl(mib, ARRAY_SIZE(mib), &pgsz, &len, NULL, 0) != 0) {
-        LOG_ERR("sysctl() hw.pagesize fail  errno: %d", errno);
-        return -1;
-    }
-    assert(len == sizeof(pgsz));
-    assert(pgsz > 0);
+    if ((pgsz = freebsd_get_page_size()) < 0) return -1;
 
     len = sizeof(pgcnt);
     if (sysctlbyname("vm.stats.vm.v_page_count", &pgcnt, &len, NULL, 0) != 0) {
@@ -403,21 +409,23 @@ static int openbsd_get_uvmexp(struct uvmexp *uvm)
 static int64_t openbsd_get_free_memsize(void)
 {
     struct uvmexp uvm;
-    if (openbsd_get_uvmexp(&uvm) != 0) return -1;
 
+    if (openbsd_get_uvmexp(&uvm) != 0) return -1;
     assert(uvm.free >= 0);
     assert(uvm.inactive >= 0);
     assert(uvm.pageshift > 0);
-    return (0LL + uvm.free + uvm.inactive) << uvm.pageshift;
+
+    return ((int64_t) + uvm.free + uvm.inactive) << uvm.pageshift;
 }
 
 static int64_t openbsd_get_usable_memsize(void)
 {
     struct uvmexp uvm;
-    if (openbsd_get_uvmexp(&uvm) != 0) return -1;
 
+    if (openbsd_get_uvmexp(&uvm) != 0) return -1;
     assert(uvm.npages > 0);
     assert(uvm.pageshift > 0);
+
     return (int64_t) uvm.npages << uvm.pageshift;
 }
 #endif
@@ -427,11 +435,14 @@ static int netbsd_get_uvmexp2(struct uvmexp_sysctl *uvm)
 {
     static const int mib[] = {CTL_VM, VM_UVMEXP2};
     size_t len = sizeof(*uvm);
+    int e;
 
     assert_nonnull(uvm);
 
     if (sysctl(mib, ARRAY_SIZE(mib), uvm, &len, NULL, 0) != 0) {
-        LOG_ERR("sysctl() vm.uvmexp2 fail  errno: %d", errno);
+        e = errno;
+        LOG_ERR("sysctl() vm.uvmexp2 fail  errno: %d", e);
+        errno = e;
         return -1;
     }
     assert(len == sizeof(*uvm));
