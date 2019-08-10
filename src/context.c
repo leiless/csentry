@@ -9,6 +9,10 @@
 #include <sys/param.h>
 #include <sys/utsname.h>
 
+#if defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__))
+#include <sys/statvfs.h>
+#endif
+
 #if defined(__APPLE__) && defined(__MACH__)
 #include <CoreFoundation/CoreFoundation.h>
 #include <mach/mach_init.h>
@@ -494,7 +498,7 @@ static int64_t get_free_memsize(void)
 static int64_t get_usable_free_memsize(void)
 {
 #if defined(__linux__)
-#error "TODO: support for Linux"
+    return 0;   /* NYI */
 #elif defined(__APPLE__) && defined(__MACH__)
     return xnu_get_usable_memsize();
 #elif defined(__FreeBSD__)
@@ -508,6 +512,36 @@ static int64_t get_usable_free_memsize(void)
 #endif
 }
 
+static void *statvfs_root(struct statvfs *v)
+{
+    assert_nonnull(v);
+    (void) memset(v, 0, sizeof(*v));
+
+    if (statvfs("/", v) != 0) {
+        /* NetBSD/DragonflyBSD implement statvfs() as a syscall */
+        LOG_ERR("statvfs(3) fail  errno: %d\n", errno);
+        return NULL;
+    }
+
+    return v;
+}
+
+static int64_t get_storage_size(void)
+{
+    struct statvfs v;
+    if (statvfs_root(&v) == NULL) return -1;
+    if (v.f_frsize <= 0 || v.f_blocks <= 0) return -1;
+    return v.f_frsize * v.f_blocks;
+}
+
+static int64_t get_storage_free(void)
+{
+    struct statvfs v;
+    if (statvfs_root(&v) == NULL) return -1;
+    if (v.f_frsize <= 0 || v.f_bavail <= 0) return -1;
+    return v.f_frsize * v.f_bavail;
+}
+
 void populate_contexts(cJSON *ctx)
 {
     cJSON *contexts;
@@ -516,7 +550,7 @@ void populate_contexts(cJSON *ctx)
     cJSON *app;
     char buffer[160];
     ssize_t sz;
-    int64_t mem;
+    int64_t val;
 
     assert_nonnull(ctx);
     contexts = cJSON_AddObjectToObject(ctx, "contexts");
@@ -546,25 +580,26 @@ void populate_contexts(cJSON *ctx)
         sz = get_device_arch(buffer, sizeof(buffer));
         if (sz > 0) (void) cJSON_AddStringToObject(device, "arch", buffer);
 
-        mem = get_phys_memsize();
-        if (mem > 0) (void) cJSON_AddNumberToObject(device, "memory_size", mem);
+        val = get_phys_memsize();
+        if (val > 0) (void) cJSON_AddNumberToObject(device, "memory_size", val);
 
-        mem = get_free_memsize();
-        if (mem > 0) (void) cJSON_AddNumberToObject(device, "free_memory", mem);
+        val = get_free_memsize();
+        if (val > 0) (void) cJSON_AddNumberToObject(device, "free_memory", val);
 
-        mem = get_usable_free_memsize();
-        if (mem > 0) (void) cJSON_AddNumberToObject(device, "usable_memory", mem);
+        val = get_usable_free_memsize();
+        if (val > 0) (void) cJSON_AddNumberToObject(device, "usable_memory", val);
 
-        /* TODO: get core/socket info? */
+        val = get_storage_size();
+        if (val > 0) (void) cJSON_AddNumberToObject(device, "storage_size", val);
+
+        val = get_storage_free();
+        if (val > 0) (void) cJSON_AddNumberToObject(device, "storage_free", val);
     }
 
     app = cJSON_AddObjectToObject(contexts, "app");
     if (app != NULL) {
         (void) cJSON_AddStringToObject(app, "build_type", CONST_CMAKE_BUILD_TYPE);
         (void) cJSON_AddNumberToObject(app, "pointer_bits", sizeof(void *) << 3u);
-
-        (void) cJSON_AddStringToObject(app, "c_flags", CONST_CMAKE_C_FLAGS);
-        (void) cJSON_AddStringToObject(app, "compile_definitions", CONST_COMPILE_DEFINITIONS);
     }
 }
 
