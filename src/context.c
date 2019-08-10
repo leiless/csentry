@@ -11,6 +11,7 @@
 
 #if defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__))
 #include <sys/statvfs.h>
+#include <sys/time.h>
 #endif
 
 #if defined(__APPLE__) && defined(__MACH__)
@@ -542,6 +543,78 @@ static int64_t get_storage_free(void)
     return v.f_frsize * v.f_bavail;
 }
 
+#if defined(__linux__)
+static int64_t linux_get_boot_time(void)
+{
+    static const char *cpuinfo = "/proc/stat";
+    long long int out = -1;
+    FILE *fp;
+    char line[32];
+    char *p;
+
+    fp = fopen(cpuinfo, "r");
+    if (fp == NULL) goto out_exit;
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strprefix(line, "btime ")) {
+            p = strchr(line, ' ');
+            assert_nonnull(p);
+            while (isspace(*++p)) continue;
+            if (isdigit(*p)) {
+                errno = 0;
+                out = strtoll(p, NULL, 10);
+                if (errno != 0) out = -1;
+            }
+            break;
+        }
+    }
+
+    (void) fclose(fp);
+out_exit:
+    return (int64_t) out;
+}
+#endif
+
+static int64_t get_boot_time(void)
+{
+#if defined(__linux__)
+    return linux_get_boot_time();
+#elif defined(BSD)
+    int mib[2] = {CTL_KERN, KERN_BOOTTIME};
+    struct timeval tv;
+    size_t sz = sizeof(tv);
+
+    if (sysctl(mib, ARRAY_SIZE(mib), &tv, &sz, NULL, 0) != 0) {
+        LOG_ERR("sysctl() kern.boottime fail  errno: %d", errno);
+        return -1;
+    }
+    assert(sz == sizeof(tv));
+    assert(tv.tv_sec > 0);
+    assert(tv.tv_usec >= 0);
+
+    return tv.tv_sec;
+#else
+#error "Unsupported operating system!"
+#endif
+}
+
+/**
+ * @param sz        At least 32 bytes(o.w. truncation will happen)
+ * see:
+ *  https://tools.ietf.org/html/rfc822#section-5
+ *  http://hackage.haskell.org/package/time-http-0.5/docs/Data-Time-Format-RFC822.html
+ *  https://validator.w3.org/feed/docs/warning/ProblematicalRFC822Date.html
+ */
+static void *fmt_epoch_to_rfc822(time_t t, char *buf, size_t sz)
+{
+    struct tm *tm;
+    assert_nonnull(buf);
+    tm = t >= 0 ? localtime(&t) : NULL;
+    if (tm == NULL) return NULL;
+    if (strftime(buf, sz, "%a, %d %b %Y %H:%M:%S %z", tm) == 0) return NULL;
+    return buf;
+}
+
 void populate_contexts(cJSON *ctx)
 {
     cJSON *contexts;
@@ -594,6 +667,10 @@ void populate_contexts(cJSON *ctx)
 
         val = get_storage_free();
         if (val > 0) (void) cJSON_AddNumberToObject(device, "storage_free", val);
+
+        if (fmt_epoch_to_rfc822(get_boot_time(), buffer, sizeof(buffer))) {
+            (void) cJSON_AddStringToObject(device, "boot_time", buffer);
+        }
     }
 
     app = cJSON_AddObjectToObject(contexts, "app");
