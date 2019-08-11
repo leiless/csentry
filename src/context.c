@@ -615,6 +615,38 @@ static void *fmt_epoch_to_rfc822(time_t t, char *buf, size_t sz)
     return buf;
 }
 
+#if defined(__APPLE__) && defined(__MACH__)
+typedef uint32_t csr_config_t;
+
+/**
+ * Get System Integrity Protection(SIP) config flags
+ * @return      always return zero(from xnu-kernel source)
+ */
+extern int csr_get_active_config(csr_config_t *);
+
+static ssize_t xnu_csr_get_active_config(char *buf, size_t sz)
+{
+    int e;
+    csr_config_t flags = 0;
+
+    assert_nonnull(buf);
+    /* strlen("0x12345678") + 1 == 11 */
+    if (sz < 11) return -1;
+
+    e = csr_get_active_config(&flags);
+    assert(e == 0);
+
+    return snprintf(buf, sz, "%#x", flags);
+}
+
+static ssize_t xnu_get_bootargs(char *buf, size_t sz)
+{
+    assert_nonnull(buf);
+    if (sysctlbyname("kern.bootargs", buf, &sz, NULL, 0) != 0) return -1;
+    return sz;
+}
+#endif
+
 void populate_contexts(cJSON *ctx)
 {
     cJSON *contexts;
@@ -642,6 +674,11 @@ void populate_contexts(cJSON *ctx)
 
         sz = get_kernel_version(buffer, sizeof(buffer));
         if (sz > 0) (void) cJSON_AddStringToObject(os, "kernel_version", buffer);
+
+#if defined(__APPLE__) && defined(__MACH__)
+        sz = xnu_get_bootargs(buffer, sizeof(buffer));
+        if (sz > 0) (void) cJSON_AddStringToObject(os, "boot_args", buffer);
+#endif
     }
 
     device = cJSON_AddObjectToObject(contexts, "device");
@@ -671,6 +708,11 @@ void populate_contexts(cJSON *ctx)
         if (fmt_epoch_to_rfc822(get_boot_time(), buffer, sizeof(buffer))) {
             (void) cJSON_AddStringToObject(device, "boot_time", buffer);
         }
+
+#if defined(__APPLE__) && defined(__MACH__)
+        sz = xnu_csr_get_active_config(buffer, sizeof(buffer));
+        if (sz > 0) (void) cJSON_AddStringToObject(device, "csr_active_config", buffer);
+#endif
     }
 
     app = cJSON_AddObjectToObject(contexts, "app");
