@@ -31,7 +31,6 @@
 
 #include "log.h"
 #include "utils.h"
-#include "constants.h"
 #include "context.h"
 
 /*
@@ -717,7 +716,11 @@ void populate_contexts(cJSON *ctx)
 
     app = cJSON_AddObjectToObject(contexts, "app");
     if (app != NULL) {
-        (void) cJSON_AddStringToObject(app, "build_type", CONST_CMAKE_BUILD_TYPE);
+        /*
+         * Settable attributes:
+         *  app_version, app_name, device_app_hash, app_id, app_build
+         *  app_start_time, app_identifier, build_type
+         */
         (void) cJSON_AddNumberToObject(app, "pointer_bits", sizeof(void *) << 3u);
     }
 }

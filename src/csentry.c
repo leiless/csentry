@@ -23,7 +23,6 @@
 #include "utils.h"
 #include "csentry.h"
 #include "curl_ez.h"
-#include "constants.h"
 #include "context.h"
 
 typedef enum {
@@ -928,6 +927,7 @@ void csentry_ctx_clear(void *client0)
     struct passwd *pwd;
     const char *env;
     cJSON *sdk;
+    char hostname[128];
 
     assert_nonnull(client);
 
@@ -964,7 +964,10 @@ void csentry_ctx_clear(void *client0)
                 (void) cJSON_AddStringToObject(user_json, "shell", env);
             }
         }
-        (void) cJSON_AddStringToObject(user_json, "hostname", CONST_HOSTNAME);
+
+        if (gethostname(hostname, sizeof(hostname)) == 0) {
+            (void) cJSON_AddStringToObject(user_json, "hostname", hostname);
+        }
 
         (void) cJSON_AddStringToObject(client->ctx, "platform", "c");
 
