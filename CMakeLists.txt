@@ -68,8 +68,6 @@ else ()
                         "Please use a newer C/C++ compiler.")
 endif ()
 
-configure_file(src/constants.h.in ${CMAKE_CURRENT_BINARY_DIR}/src/constants.h)
-
 include_directories(include)
 
 find_package(curl REQUIRED)
