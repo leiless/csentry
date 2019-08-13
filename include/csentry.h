@@ -39,13 +39,7 @@ void csentry_destroy(void *);
 void csentry_debug(void *);
 
 void csentry_capture_message(void *, const cJSON * _nullable, uint32_t, const char *, ...);
-
-#define csentry_capture_exception(handle, format, ...)          \
-    csentry_capture_message(                                    \
-            handle, NULL,                                       \
-            CSENTRY_LEVEL_FATAL | CSENTRY_CAPTURE_ENCLOSE_BT,   \
-            format, ##__VA_ARGS__)
-
+void csentry_capture_exception(void *, const char *, ...);
 void csentry_add_breadcrumb(void *, const cJSON * _nullable, uint32_t, const char *, ...);
 
 void csentry_get_last_event_id(void *, uuid_t);

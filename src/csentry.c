@@ -588,12 +588,12 @@ out_exc:
  *
  * see: https://docs.sentry.io/development/sdk-dev/attributes/
  */
-void csentry_capture_message(
+static void csentry_capture_message_ap(
         void *client0,
         const cJSON * _nullable attrs,
         uint32_t options,
         const char *format,
-        ...)
+        va_list ap_in)
 {
     csentry_t *client = (csentry_t *) client0;
     uuid_t u;
@@ -609,14 +609,14 @@ void csentry_capture_message(
     assert_nonnull(format);
 
 out_toctou:
-    va_start(ap, format);
+    va_copy(ap, ap_in);     /* va_copy() since C99 */
     sz = vsnprintf(NULL, 0, format, ap);
     va_end(ap);
 
     if (sz > 0) {
         msg = (char *) malloc(sz + 1);
         if (msg != NULL) {
-            va_start(ap, format);
+            va_copy(ap, ap_in);
             sz2 = vsnprintf(msg, sz + 1, format, ap);
             va_end(ap);
 
@@ -681,6 +681,30 @@ out_toctou:
     pthread_mutex_unlock_safe(&client->mtx);
 
     if (msg != format) free(msg);
+}
+
+void csentry_capture_message(
+        void *handle,
+        const cJSON * _nullable attrs,
+        uint32_t options,
+        const char *format,
+        ...)
+{
+    va_list ap;
+    va_start(ap, format);
+    csentry_capture_message_ap(handle, attrs, options, format, ap);
+    va_end(ap);
+}
+
+void csentry_capture_exception(void *handle, const char *format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+    csentry_capture_message_ap(
+            handle, NULL,
+            CSENTRY_LEVEL_FATAL | CSENTRY_CAPTURE_ENCLOSE_BT,
+            format, ap);
+    va_end(ap);
 }
 
 static void breadcrumb_set_level_attr(cJSON *breadcrumb, uint32_t options)
