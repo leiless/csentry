@@ -541,7 +541,7 @@ out_exit:
     return output;
 }
 
-static void csentry_enclose_backtrace(cJSON *ctx)
+static void csentry_enclose_backtrace(cJSON *ctx, const char *type)
 {
     char *bt;
     cJSON *exc;
@@ -560,7 +560,7 @@ static void csentry_enclose_backtrace(cJSON *ctx)
     obj = cJSON_CreateObject();
     if (obj == NULL) goto out_exc;
 
-    if (cJSON_AddStringToObject(obj, "type", "backtrace") == NULL) goto out_obj;
+    if (cJSON_AddStringToObject(obj, "type", type) == NULL) goto out_obj;
     if (cJSON_AddStringToObject(obj, "value", bt) == NULL) goto out_obj;
 
     cJSON_AddItemToArray(values, obj);  /* cJSON_AddItemToArray() always success */
@@ -638,7 +638,10 @@ out_toctou:
 
     msg_set_level_attr(client, options);
 
-    (void) cjson_add_or_update_str_to_obj(client->ctx, "message", msg);
+    if ((options & CSENTRY_CAPTURE_ENCLOSE_BT) == 0) {
+        (void) cjson_add_or_update_str_to_obj(client->ctx, "message", msg);
+    }
+
     uuid_generate(u);
     uuid_unparse_lower(u, uuid);
     /*
@@ -666,7 +669,7 @@ out_toctou:
 
     /* see: https://docs.sentry.io/development/sdk-dev/interfaces/ */
     if (options & CSENTRY_CAPTURE_ENCLOSE_BT) {
-        csentry_enclose_backtrace(client->ctx);
+        csentry_enclose_backtrace(client->ctx, msg);
     }
 
     char *str = cJSON_Print(client->ctx);

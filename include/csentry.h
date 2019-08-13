@@ -18,27 +18,34 @@
 #define CSENTRY_VERSION             "0.1"
 
 /* Enclose backtrace into message capture */
-#define CSENTRY_CAPTURE_ENCLOSE_BT  0x1
+#define CSENTRY_CAPTURE_ENCLOSE_BT  0x1u
 
 /*
  * Most significant 3 bits denoted log level
  * Hence at most 8 levels can be supported
  */
-#define CSENTRY_LEVEL_ERROR         0x00000000      /* Unnecessary */
-#define CSENTRY_LEVEL_DEBUG         0x20000000
-#define CSENTRY_LEVEL_INFO          0x40000000
-#define CSENTRY_LEVEL_WARN          0x60000000
-#define CSENTRY_LEVEL_FATAL         0x80000000
+#define CSENTRY_LEVEL_ERROR         0x00000000u     /* Unnecessary */
+#define CSENTRY_LEVEL_DEBUG         0x20000000u
+#define CSENTRY_LEVEL_INFO          0x40000000u
+#define CSENTRY_LEVEL_WARN          0x60000000u
+#define CSENTRY_LEVEL_FATAL         0x80000000u
 
-#define CSENTRY_BC_TYPE_DEFAULT     0x00000000      /* Unnecessary */
-#define CSENTRY_BC_TYPE_HTTP        0x08000000
-#define CSENTRY_BC_TYPE_ERROR       0x10000000
+#define CSENTRY_BC_TYPE_DEFAULT     0x00000000u     /* Unnecessary */
+#define CSENTRY_BC_TYPE_HTTP        0x08000000u
+#define CSENTRY_BC_TYPE_ERROR       0x10000000u
 
 void * _nullable csentry_new(const char *, const cJSON * _nullable, float, int);
 void csentry_destroy(void *);
 void csentry_debug(void *);
 
 void csentry_capture_message(void *, const cJSON * _nullable, uint32_t, const char *, ...);
+
+#define csentry_capture_exception(handle, format, ...)          \
+    csentry_capture_message(                                    \
+            handle, NULL,                                       \
+            CSENTRY_LEVEL_FATAL | CSENTRY_CAPTURE_ENCLOSE_BT,   \
+            format, ##__VA_ARGS__)
+
 void csentry_add_breadcrumb(void *, const cJSON * _nullable, uint32_t, const char *, ...);
 
 void csentry_get_last_event_id(void *, uuid_t);
