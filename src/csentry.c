@@ -16,6 +16,10 @@
 
 #include <uuid/uuid.h>
 
+#if defined(__unix__) || defined(__unix) || defined(unix) || (defined(__APPLE__) && defined(__MACH__))
+#include <execinfo.h>
+#endif
+
 #include <curl/curl.h>
 #include <cjson/cJSON.h>
 
@@ -493,6 +497,86 @@ static void msg_set_level_attr(csentry_t *client, uint32_t options)
     if (i != 0) msg_set_level_attr0(client->ctx, i);
 }
 
+#define BACKTRACE_MAX_DEPTH     64
+
+/**
+ * Get backtrace of the calling thread
+ * @return      Backtrace string(NULL of ENOMEM)
+ */
+static char *csentry_get_backtrace(void)
+{
+    char *output = NULL, *p;
+    void *arr[BACKTRACE_MAX_DEPTH];
+    char **str;
+    /*
+     * Linux, macOS, OpenBSD uses `int' as return type
+     * FreeBSD, NetBSD, DragonFlyBSD uses `size_t' as return type
+     */
+    __typeof__(backtrace(NULL, 0)) i, n;
+
+    size_t total = 0, sz;
+
+    n = backtrace(arr, ARRAY_SIZE(arr));
+    str = backtrace_symbols(arr, n);
+
+    for (i = 0; i < n; i++) {
+        total += strlen(str[i]) + 1;    /* +1 for newline */
+    }
+    if (total == 0) goto out_exit;
+
+    output = malloc(total + 1);
+    if (output == NULL) goto out_exit;
+
+    p = output;
+    for (i = 0; i < n; i++) {
+        sz = strlen(str[i]);
+        (void) strncpy(p, str[i], sz);
+        p += sz;
+        *p++ = '\n';
+    }
+    *p = '\0';
+
+out_exit:
+    free(str);
+    return output;
+}
+
+static void csentry_enclose_backtrace(cJSON *ctx)
+{
+    char *bt;
+    cJSON *exc;
+    cJSON *values;
+    cJSON *obj;
+
+    bt = csentry_get_backtrace();
+    if (bt == NULL) goto out_ret;
+
+    exc = cJSON_AddObjectToObject(ctx, "exception");
+    if (exc == NULL) goto out_bt;
+
+    values = cJSON_AddArrayToObject(exc, "values");
+    if (values == NULL) goto out_exc;
+
+    obj = cJSON_CreateObject();
+    if (obj == NULL) goto out_exc;
+
+    if (cJSON_AddStringToObject(obj, "type", "backtrace") == NULL) goto out_obj;
+    if (cJSON_AddStringToObject(obj, "value", bt) == NULL) goto out_obj;
+
+    cJSON_AddItemToArray(values, obj);  /* cJSON_AddItemToArray() always success */
+
+out_bt:
+    free(bt);
+out_ret:
+    return;
+
+out_obj:
+    cJSON_Delete(obj);
+out_exc:
+    cJSON_DeleteItemFromObject(ctx, "exception");
+    goto out_bt;
+}
+
 /**
  * char buf[1];
  * int n = vsnprintf(buf, 1, fmt, ap);
@@ -578,6 +662,11 @@ out_toctou:
 
         json = cJSON_GetObjectItem(attrs, "context");
         if (json != NULL) (void) csentry_ctx_update(client, json);
+    }
+
+    /* see: https://docs.sentry.io/development/sdk-dev/interfaces/ */
+    if (options & CSENTRY_CAPTURE_ENCLOSE_BT) {
+        csentry_enclose_backtrace(client->ctx);
     }
 
     char *str = cJSON_Print(client->ctx);

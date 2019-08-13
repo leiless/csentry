@@ -17,7 +17,8 @@
 #define CSENTRY_NAME                "cSentry"
 #define CSENTRY_VERSION             "0.1"
 
-#define CSENTRY_CAPTURE_ASYNC       0x1
+/* Enclose backtrace into message capture */
+#define CSENTRY_CAPTURE_ENCLOSE_BT  0x1
 
 /*
  * Most significant 3 bits denoted log level

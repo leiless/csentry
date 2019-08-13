@@ -42,7 +42,7 @@ static void baseline_test(void)
     csentry_debug(handle);
     csentry_ctx_clear(handle);
 
-    csentry_capture_message(handle, NULL, CSENTRY_LEVEL_DEBUG, "hello world");
+    csentry_capture_message(handle, NULL, CSENTRY_LEVEL_DEBUG | CSENTRY_CAPTURE_ENCLOSE_BT, "hello world");
     csentry_get_last_event_id(handle, u);
     uuid_unparse_lower(u, uu1);
     csentry_get_last_event_id_string(handle, uu2);
