@@ -534,7 +534,7 @@ static int64_t get_storage_size(void)
     return v.f_frsize * v.f_blocks;
 }
 
-static int64_t get_storage_free(void)
+static int64_t get_free_storage_size(void)
 {
     struct statvfs v;
     if (statvfs_root(&v) == NULL) return -1;
@@ -701,8 +701,8 @@ void populate_contexts(cJSON *ctx)
         val = get_storage_size();
         if (val > 0) (void) cJSON_AddNumberToObject(device, "storage_size", val);
 
-        val = get_storage_free();
-        if (val > 0) (void) cJSON_AddNumberToObject(device, "storage_free", val);
+        val = get_free_storage_size();
+        if (val > 0) (void) cJSON_AddNumberToObject(device, "free_storage", val);
 
         if (fmt_epoch_to_rfc822(get_boot_time(), buffer, sizeof(buffer))) {
             (void) cJSON_AddStringToObject(device, "boot_time", buffer);
