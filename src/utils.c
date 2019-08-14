@@ -197,7 +197,7 @@ cJSON * _nullable cjson_add_or_update_str_to_obj(
  * Provides similar functionality to cjson_add_or_update_str_to_obj()
  * Yet we'll try to reduce memory footprint by comparing if existing value equals
  */
-cJSON * _nullable cjson_add_or_update_str_to_obj_x(
+cJSON * _nullable cjson_add_or_update_str_to_obj_lazy(
         cJSON *obj,
         const char *name,
         const char *str)

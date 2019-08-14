@@ -74,7 +74,7 @@ cJSON * _nullable cjson_add_or_update_str_to_obj(
     cJSON *, const char *, const char *
 );
 
-cJSON * _nullable cjson_add_or_update_str_to_obj_x(
+cJSON * _nullable cjson_add_or_update_str_to_obj_lazy(
     cJSON *, const char *, const char *
 );
 
