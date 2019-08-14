@@ -38,7 +38,7 @@ void * _nullable csentry_new(const char *, const cJSON * _nullable, float, int);
 void csentry_destroy(void *);
 void csentry_debug(void *);
 
-void csentry_capture_message(void *, const cJSON * _nullable, uint32_t, const char *, ...);
+void csentry_capture_message(void *, uint32_t, const char *, ...);
 void csentry_capture_exception(void *, const char *, ...);
 void csentry_add_breadcrumb(void *, const cJSON * _nullable, uint32_t, const char *, ...);
 

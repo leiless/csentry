@@ -589,17 +589,15 @@ out_exc:
  * see: https://docs.sentry.io/development/sdk-dev/attributes/
  */
 static void csentry_capture_message_ap(
-        void *client0,
-        const cJSON * _nullable attrs,
+        void *handle,
         uint32_t options,
         const char *format,
         va_list ap_in)
 {
-    csentry_t *client = (csentry_t *) client0;
+    csentry_t *client = (csentry_t *) handle;
     uuid_t u;
     uuid_string_t uuid;
     char ts[ISO_8601_BUFSZ];
-    cJSON *json;
     va_list ap;
     int sz;
     int sz2;
@@ -657,16 +655,6 @@ out_toctou:
 
     (void) cjson_set_default_str_to_obj(client->ctx, "logger", "(builtin)");
 
-    if (cJSON_IsObject(attrs)) {
-        json = cJSON_GetObjectItem(attrs, "logger");
-        if (cJSON_IsString(json)) {
-            (void) cjson_add_or_update_str_to_obj_x(client->ctx, "logger", cJSON_GetStringValue(json));
-        }
-
-        json = cJSON_GetObjectItem(attrs, "context");
-        if (json != NULL) (void) csentry_ctx_update(client, json);
-    }
-
     /* see: https://docs.sentry.io/development/sdk-dev/interfaces/ */
     if (options & CSENTRY_CAPTURE_ENCLOSE_BT) {
         csentry_enclose_backtrace(client->ctx, msg);
@@ -685,14 +673,13 @@ out_toctou:
 
 void csentry_capture_message(
         void *handle,
-        const cJSON * _nullable attrs,
         uint32_t options,
         const char *format,
         ...)
 {
     va_list ap;
     va_start(ap, format);
-    csentry_capture_message_ap(handle, attrs, options, format, ap);
+    csentry_capture_message_ap(handle, options, format, ap);
     va_end(ap);
 }
 
@@ -701,7 +688,7 @@ void csentry_capture_exception(void *handle, const char *format, ...)
     va_list ap;
     va_start(ap, format);
     csentry_capture_message_ap(
-            handle, NULL,
+            handle,
             CSENTRY_LEVEL_FATAL | CSENTRY_CAPTURE_ENCLOSE_BT,
             format, ap);
     va_end(ap);
@@ -991,11 +978,11 @@ int csentry_ctx_update(void *client0, const cJSON * _nullable ctx)
         LOG_DBG("%s\n", iter->string);
 
         if (is_known_ctx_name(iter->string)) {
-            (void) csentry_ctx_update0(client, iter->string, iter);
-
             LOG_DBG("Merging %s into cSentry context\n", iter->string);
+            (void) csentry_ctx_update0(client, iter->string, iter);
         } else {
             /* Unknown context names will be simply ignored */
+            LOG_DBG("Ignored unknown context name %s", iter->string);
         }
     }
 
