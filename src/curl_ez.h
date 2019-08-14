@@ -22,6 +22,8 @@ struct memory_struct {
     size_t size;
 };
 
+static struct memory_struct null_memory_struct = {NULL, 0};
+
 typedef struct {
     CURL *curl;
     struct curl_slist *headers;
@@ -49,7 +51,7 @@ void curl_ez_free(curl_ez_t * _nullable);
 CURLcode curl_ez_set_header(curl_ez_t *, const char *);
 
 curl_ez_reply curl_ez_post(
-    const curl_ez_t *,
+    curl_ez_t *,
     const char *,
     const char * _nullable,
     size_t,
@@ -89,7 +91,7 @@ out_exit2:
     }
 
     ez->headers = NULL;
-    (void) memset(&ez->chunk, 0, sizeof(ez->chunk));
+    ez->chunk = null_memory_struct;
 
 out_exit:
     return ez;
@@ -100,6 +102,9 @@ void curl_ez_free(curl_ez_t * _nullable ez)
     if (ez != NULL) {
         curl_slist_free_all(ez->headers);
         curl_easy_cleanup(ez->curl);
+        assert(ez->chunk.data == null_memory_struct.data);
+        assert(ez->chunk.size == null_memory_struct.size);
+        free(ez);
     }
 }
 
@@ -154,7 +159,7 @@ static size_t ez_post_write_cb(
  * @return      Post reply, you're responsible to free the `data'
  */
 curl_ez_reply curl_ez_post(
-        const curl_ez_t *ez,
+        curl_ez_t *ez,
         const char *url,
         const char * _nullable data,
         size_t size,
@@ -169,7 +174,7 @@ curl_ez_reply curl_ez_post(
     assert(!!data || !size);
 
     if (compress) {
-        /* TODO */
+        /* TODO: use zlib to gzip the `data' */
     } else {
         e = curl_ez_setopt(ez, CURLOPT_POSTFIELDS, data);
         if (e != CURLE_OK) goto out_exit;
@@ -192,8 +197,14 @@ curl_ez_reply curl_ez_post(
     e = curl_easy_getinfo(ez->curl, CURLINFO_RESPONSE_CODE, &status_code);
     if (e != CURLE_OK) goto out_exit;
 
+    assert_nonnull(ez->chunk.data);
+    assert(ez->chunk.size != 0);
+
     rep.data = strdup(ez->chunk.data);
     if (rep.data == NULL) goto out_exit;
+
+    free(ez->chunk.data);
+    ez->chunk = null_memory_struct;
 
     rep.status_code = status_code;
 out_exit:

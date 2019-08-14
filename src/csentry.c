@@ -653,7 +653,7 @@ out_toctou:
     format_iso_8601_time(ts);
     (void) cjson_add_or_update_str_to_obj(client->ctx, "timestamp", ts);
 
-    (void) cjson_set_default_str_to_obj(client->ctx, "logger", "(builtin)");
+    (void) cjson_set_default_str_to_obj(client->ctx, "logger", "(unknown)");
 
     /* see: https://docs.sentry.io/development/sdk-dev/interfaces/ */
     if (options & CSENTRY_CAPTURE_ENCLOSE_BT) {
@@ -788,7 +788,7 @@ out_toctou:
     format_iso_8601_time(ts);
     (void) cJSON_AddStringToObject(breadcrumb, "timestamp", ts);
 
-    (void) cJSON_AddStringToObject(breadcrumb, "category", "(builtin)");
+    (void) cJSON_AddStringToObject(breadcrumb, "category", "(unknown)");
 
     breadcrumb_set_level_attr(breadcrumb, options);
     breadcrumb_set_type_attr(breadcrumb, options);
