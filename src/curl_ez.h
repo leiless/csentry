@@ -50,19 +50,21 @@ void curl_ez_free(curl_ez_t * _nullable);
 
 CURLcode curl_ez_set_header(curl_ez_t *, const char *);
 
+#define CURL_EZ_FLAG_HTTP_COMPRESS      0x1ULL
+
 curl_ez_reply curl_ez_post(
     curl_ez_t *,
     const char *,
     const char * _nullable,
     size_t,
-    int
+    uint64_t
 );
 
 curl_ez_reply curl_ez_post_json(
     curl_ez_t *,
     const char *,
     const cJSON *,
-    int
+    uint64_t
 );
 
 #ifdef __cplusplus
@@ -111,6 +113,7 @@ void curl_ez_free(curl_ez_t * _nullable ez)
 /**
  * Set header for a cURL handle
  * @return  CURLcode(CURLE_OK for success)
+ * see: https://curl.haxx.se/libcurl/c/httpcustomheader.html
  */
 CURLcode curl_ez_set_header(curl_ez_t *ez, const char *header)
 {
@@ -163,7 +166,7 @@ curl_ez_reply curl_ez_post(
         const char *url,
         const char * _nullable data,
         size_t size,
-        int compress)
+        uint64_t flags)
 {
     CURLcode e;
     int status_code;
@@ -171,10 +174,13 @@ curl_ez_reply curl_ez_post(
 
     assert_nonnull(ez);
     assert_nonnull(url);
-    assert(!!data || !size);
+    assert(!!data | !size);
 
-    if (compress) {
-        /* TODO: use zlib to gzip the `data' */
+    if (flags & CURL_EZ_FLAG_HTTP_COMPRESS) {
+        /*
+         * see: https://en.wikipedia.org/wiki/HTTP_compression
+         * TODO: NYI
+         */
     } else {
         e = curl_ez_setopt(ez, CURLOPT_POSTFIELDS, data);
         if (e != CURLE_OK) goto out_exit;
@@ -218,7 +224,7 @@ curl_ez_reply curl_ez_post_json(
         curl_ez_t *ez,
         const char *url,
         const cJSON *json,
-        int compress)
+        uint64_t flags)
 {
     CURLcode e;
     curl_ez_reply rep = {-1, NULL};
@@ -231,10 +237,9 @@ curl_ez_reply curl_ez_post_json(
     data = cJSON_Print(json);
     if (data == NULL) goto out_exit;
 
-    /* TODO: check if Content-Type already set */
     e = curl_ez_set_header(ez, "Content-Type: application/json");
     if (e == CURLE_OK) {
-        rep = curl_ez_post(ez, url, data, strlen(data), compress);
+        rep = curl_ez_post(ez, url, data, strlen(data), flags);
     }
 
     free(data);
