@@ -38,7 +38,7 @@ typedef struct {
     const char *pubkey;
     const char *seckey;
     const char *store_url;
-    int sample_rate;
+    uint32_t sample_rate;    /* Event sample rate [0, 100] */
 
     cJSON *ctx;
     uuid_t last_event_id;
@@ -608,6 +608,8 @@ static void csentry_capture_message_ap(
         const char *format,
         va_list ap_in)
 {
+    static volatile uint64_t event_id = 0, t;
+
     csentry_t *client = (csentry_t *) handle;
     uuid_t u;
     uuid_string_t uuid;
@@ -619,6 +621,13 @@ static void csentry_capture_message_ap(
 
     assert_nonnull(client);
     assert_nonnull(format);
+
+    t = event_id++;
+    /* see: https://docs.sentry.io/development/sdk-dev/features/#event-sampling */
+    if (generate_rand(0, 100) >= client->sample_rate) {
+        LOG_DBG("Event %"PRIx64" sampled out  format: %s", t, format);
+        return;
+    }
 
 out_toctou:
     va_copy(ap, ap_in);     /* va_copy() since C99 */

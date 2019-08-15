@@ -7,6 +7,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "utils.h"
 
@@ -273,5 +274,25 @@ int parse_llong(const char *str, char delim, int base, long long *val)
     if (ok) *val = t;
 
     return ok;
+}
+
+/**
+ * Generate a random number [lo, hi)
+ */
+uint32_t generate_rand(uint32_t lo, uint32_t hi)
+{
+    assert(lo < hi);
+
+#if (defined(__APPLE__) && defined(__MACH__)) || defined(__FreeBSD__) || defined(__DragonflyBSD__)
+    return lo + arc4random_uniform(hi);
+#elif defined(__unix__) || defined(__unix) || defined(unix)
+    unsigned long v;
+    srandom(time(NULL) ^ (getpid() << 17u));
+    v = (unsigned long) random();
+    v = (v >> 16u) ^ ((uint32_t) v);
+    return lo + v % (hi - lo);
+#else
+#error "Unsupported operating system!"
+#endif
 }
 

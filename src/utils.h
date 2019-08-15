@@ -84,5 +84,7 @@ cJSON * _nullable cjson_set_default_str_to_obj(
 
 int parse_llong(const char *, char, int, long long *);
 
+uint32_t generate_rand(uint32_t, uint32_t);
+
 #endif /* CSENTRY_UTILS_H */
 
