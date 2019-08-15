@@ -44,6 +44,8 @@ typedef struct {
     uuid_t last_event_id;
     pthread_mutex_t mtx;    /* Protects ctx and last_event_id */
 
+    curl_ez_t *ez;
+
     /* Used for POST data thread */
     pthread_t thread;
     volatile int keepalive;
@@ -265,6 +267,8 @@ static void *post_data_thread(void *arg)
     free((void *) client->store_url);
     cJSON_Delete(client->ctx);
 
+    curl_ez_free(client->ez);
+
     pthread_mutex_destroy_safe(&client->mtx);
     pthread_cond_destroy_safe(&client->thread_cv);
 
@@ -310,6 +314,14 @@ void * _nullable csentry_new(
     csentry_ctx_clear(client);
     if (csentry_ctx_update(client, ctx) != 0) {
         errno = ENOTSUP;
+        csentry_destroy(client);
+        client = NULL;
+        goto out_exit;
+    }
+
+    client->ez = curl_ez_new();
+    if (client->ez == NULL) {
+        errno = ENOMEM;
         csentry_destroy(client);
         client = NULL;
         goto out_exit;
@@ -423,6 +435,9 @@ static void post_data(csentry_t *client)
 {
     char xauth[X_AUTH_HEADER_SIZE];
     int n;
+    CURLcode e;
+    curl_ez_reply rep;
+
     assert_nonnull(client);
 
     if (client->post_done) return;
@@ -454,24 +469,23 @@ static void post_data(csentry_t *client)
     assert(n < X_AUTH_HEADER_SIZE);
     LOG_DBG("size: %d auth: %s", n, xauth);
 
-    curl_ez_t *ez = curl_ez_new();
-    assert_nonnull(ez);
-    CURLcode e;
-    e = curl_ez_set_header(ez, xauth);
-    assert(e == CURLE_OK);
+    e = curl_ez_set_header(client->ez, xauth);
+    if (e != CURLE_OK) {
+        LOG_ERR("curl_ez_set_header()  header: %s", xauth);
+        goto out_exit;
+    }
 
-    curl_ez_reply rep = curl_ez_post_json(ez, client->store_url, client->ctx, 0);
+    rep = curl_ez_post_json(client->ez, client->store_url, client->ctx, 0);
     client->post_done = 1;
     if (rep.status_code > 0) {
         update_last_event_id(client, &rep);
-
         LOG_DBG("status code: %d data: %s", rep.status_code, rep.data);
         free(rep.data);
     }
 
+out_exit:
     /* Delete breadcrumbs after each post */
     cJSON_DeleteItemFromObject(client->ctx, "breadcrumbs");
-    curl_ez_free(ez);
 }
 
 static const char *sentry_levels[] = {
