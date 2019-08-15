@@ -37,13 +37,16 @@ static void baseline_test(void)
     csentry_debug(handle);
     csentry_destroy(handle);
 
-    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.9f, 0);
+    handle = csentry_new("https://eeadde0381684a339597770ce54b4c66@sentry.io/1489851", NULL, 0.5f, 0);
     assert_nonnull(handle);
     csentry_debug(handle);
     csentry_ctx_clear(handle);
 
     csentry_capture_message(handle, CSENTRY_LEVEL_DEBUG, "hello world");
-    //csentry_capture_exception(handle, "Unix epoch: %ld", time(NULL));
+
+    csentry_set_enable(handle, 0);
+    csentry_capture_exception(handle, "Unix epoch: %ld", time(NULL));
+
     csentry_get_last_event_id(handle, u);
     uuid_unparse_lower(u, uu1);
     csentry_get_last_event_id_string(handle, uu2);

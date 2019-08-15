@@ -52,5 +52,7 @@ int csentry_ctx_update_extra(void *, const cJSON * _nullable);
 int csentry_ctx_update(void *, const cJSON * _nullable);
 void csentry_ctx_clear(void *);
 
+void csentry_set_enable(void *, int);
+
 #endif /* __CSENTRY_H__ */
 

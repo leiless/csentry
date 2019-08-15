@@ -40,6 +40,8 @@ typedef struct {
     const char *store_url;
     uint32_t sample_rate;    /* Event sample rate [0, 100] */
 
+    volatile uint32_t enabled;
+
     cJSON *ctx;
     uuid_t last_event_id;
     pthread_mutex_t mtx;    /* Protects ctx and last_event_id */
@@ -344,6 +346,8 @@ void * _nullable csentry_new(
         goto out_exit;
     }
 
+    client->enabled = 1;
+
     if (install_handlers) {
         /* TODO: capture signals */
     }
@@ -621,6 +625,11 @@ static void csentry_capture_message_ap(
 
     assert_nonnull(client);
     assert_nonnull(format);
+
+    if (!client->enabled) {
+        LOG_WARN("cSentry client %p got disabled", client);
+        return;
+    }
 
     t = event_id++;
     /* see: https://docs.sentry.io/development/sdk-dev/features/#event-sampling */
@@ -1108,5 +1117,12 @@ void csentry_ctx_clear(void *client0)
     }
 
     pthread_mutex_unlock_safe(&client->mtx);
+}
+
+void csentry_set_enable(void *handle, int enable)
+{
+    csentry_t *client = (csentry_t *) handle;
+    assert_nonnull(client);
+    client->enabled = enable;
 }
 
