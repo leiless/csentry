@@ -35,6 +35,8 @@ typedef struct {
     char *data;
 } curl_ez_reply;
 
+static curl_ez_reply null_curl_ez_reply = {-1, NULL};
+
 /** @return a CURLcode(CURLE_OK means success) */
 #define curl_ez_setopt(ez, opt, param) ({           \
         assert_nonnull(ez);                         \
@@ -159,7 +161,7 @@ static size_t ez_post_write_cb(
 
 /**
  * Perform cURL post with raw data
- * @return      Post reply, you're responsible to free the `data'
+ * @return      Post reply, you're responsible to free the `data' field
  */
 curl_ez_reply curl_ez_post(
         curl_ez_t *ez,
@@ -170,7 +172,7 @@ curl_ez_reply curl_ez_post(
 {
     CURLcode e;
     int status_code;
-    curl_ez_reply rep = {-1, NULL};
+    curl_ez_reply rep = null_curl_ez_reply;
 
     assert_nonnull(ez);
     assert_nonnull(url);
@@ -212,6 +214,7 @@ curl_ez_reply curl_ez_post(
     free(ez->chunk.data);
     ez->chunk = null_memory_struct;
 
+    assert(status_code > 0);
     rep.status_code = status_code;
 out_exit:
     return rep;
@@ -219,6 +222,7 @@ out_exit:
 
 /**
  * Perform cURL post with json data
+ * @return      Post reply, you're responsible to free the `data' field
  */
 curl_ez_reply curl_ez_post_json(
         curl_ez_t *ez,
@@ -227,7 +231,7 @@ curl_ez_reply curl_ez_post_json(
         uint64_t flags)
 {
     CURLcode e;
-    curl_ez_reply rep = {-1, NULL};
+    curl_ez_reply rep = null_curl_ez_reply;
     char *data;
 
     assert_nonnull(ez);
